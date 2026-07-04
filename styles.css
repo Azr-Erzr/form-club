@@ -196,6 +196,15 @@ select { background-image: none; }
 .excard-name { font-family: var(--serif); font-size: 1.18rem; font-weight: 500; line-height: 1.25; flex: 1; }
 .excard-target { color: var(--champagne); font-size: 0.78rem; letter-spacing: 0.08em; white-space: nowrap; margin-top: 4px; }
 .excard-cues { padding: 0 18px 4px; color: var(--taupe); font-size: 0.85rem; line-height: 1.45; }
+.nudge {
+  margin: 6px 18px 8px; padding: 9px 10px; border: 1px solid rgba(138, 155, 110, 0.35);
+  border-radius: 10px; background: rgba(138, 155, 110, 0.1); color: var(--ivory);
+  display: flex; align-items: flex-start; gap: 8px; font-size: 0.78rem;
+}
+.nudge span { flex: 1; display: flex; gap: 7px; align-items: flex-start; }
+.nudge svg { width: 14px; height: 14px; color: var(--sage); flex: 0 0 auto; margin-top: 2px; }
+.nudge button { color: var(--taupe); width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto; }
+.nudge button:active { background: rgba(242, 236, 223, 0.08); }
 .excard-stopif { padding: 2px 18px 8px; color: var(--terracotta); font-size: 0.76rem; display: flex; gap: 6px; align-items: baseline; }
 .excard-stopif svg { width: 12px; height: 12px; transform: translateY(1px); flex: 0 0 auto; }
 
@@ -305,6 +314,9 @@ table.datatable td:first-child { color: var(--taupe); }
 table.datatable tr.me td { color: var(--champagne); }
 .num { text-align: right; }
 th.num { text-align: right; }
+.prtable { table-layout: fixed; font-size: 0.76rem; }
+.prtable th:first-child, .prtable td:first-child { width: 34%; white-space: normal; line-height: 1.25; }
+.prtable th:not(:first-child), .prtable td:not(:first-child) { width: 22%; vertical-align: top; }
 
 .sparkline { width: 100%; height: 56px; display: block; }
 

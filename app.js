@@ -20,6 +20,16 @@
   const WRITE_RETRY_MS = 30 * 1000;
   const FOCUS_REFRESH_MS = 45 * 1000;
   const LOG_READ_DAYS = 180;
+  const WARMUP_BLOCK = [
+    ['EX0014', '1 min', 0, 'Easy pulse raiser'],
+    ['FE_Arm_Circles', '30 sec', 15, 'Shoulders easy'],
+    ['EX0013', '8 reps', 15, 'Spine through comfortable range'],
+    ['EX0005', '10 reps', 30, 'Warm squat pattern'],
+    ['EX0008', '10 reps', 30, 'Glutes on'],
+    ['EX0021', '30 sec/side', 15, 'Hips open'],
+    ['FE_Hamstring_Stretch', '30 sec/side', 15, 'Easy hamstrings'],
+    ['FE_Calf_Stretch_Elbows_Against_Wall', '30 sec/side', 15, 'Ankles and calves'],
+  ];
 
   function loadSettings() {
     let s = {};
@@ -590,6 +600,83 @@
     return good.length >= 2;
   }
 
+  function setScore(s) {
+    const w = Number(s.Weight_lb || 0);
+    const r = Number(s.ActualReps || 0);
+    if (w > 0 && r > 0) return w * (1 + r / 30);
+    return r;
+  }
+
+  function formatSetLine(s) {
+    if (!s) return '-';
+    const w = Number(s.Weight_lb || 0), r = Number(s.ActualReps || 0);
+    return w > 0 ? (w + ' x ' + (r || '?')) : ((r || '?') + ' reps');
+  }
+
+  function bestSet(rows) {
+    return rows.filter(s => s.Completed && Number(s.ActualReps || 0) > 0)
+      .sort((a, b) => setScore(b) - setScore(a))[0] || null;
+  }
+
+  function bestSetByExercise(exId, rows) {
+    return bestSet(rows.filter(s => s.ExerciseID === exId));
+  }
+
+  function previousBestFor(exId) {
+    return bestSetByExercise(exId, allSets().filter(s => s.UserName === currentUser()));
+  }
+
+  function progressionNudgeFor(exId) {
+    const mine = allSets().filter(s => s.UserName === currentUser() && s.ExerciseID === exId && s.Completed);
+    const byDate = {};
+    mine.forEach(s => {
+      const d = String(s.Date || '').slice(0, 10);
+      if (!d) return;
+      byDate[d] = byDate[d] || [];
+      byDate[d].push(s);
+    });
+    const recent = Object.keys(byDate).sort().slice(-4).map(d => bestSet(byDate[d])).filter(Boolean);
+    if (recent.length < 4) return null;
+    const sig = recent.map(formatSetLine).join('|');
+    if (new Set(recent.map(formatSetLine)).size !== 1) return null;
+    const dismissKey = currentUser() + ':' + exId + ':' + sig;
+    const dismissed = lsGet('ef_nudge_dismissed', {});
+    if (dismissed[dismissKey]) return null;
+    const last = recent[recent.length - 1];
+    const hasWeight = Number(last.Weight_lb || 0) > 0;
+    return {
+      key: dismissKey,
+      text: 'Same top set for 4 sessions: ' + formatSetLine(last) + '. Try ' + (hasWeight ? '+5 lb or +1-2 reps.' : '+1-2 reps or a harder variation.'),
+    };
+  }
+
+  function dismissNudge(key) {
+    const dismissed = lsGet('ef_nudge_dismissed', {});
+    dismissed[key] = Date.now();
+    lsSet('ef_nudge_dismissed', dismissed);
+  }
+
+  function prBoards() {
+    const sets = allSets().filter(s => s.Completed && s.ExerciseID && Number(s.ActualReps || 0) > 0);
+    const today = todayStr();
+    const ws = weekStart();
+    const exerciseIds = [...new Set(
+      sets.filter(s => String(s.Date || '').slice(0, 10) >= ws || s.UserName === currentUser()).map(s => s.ExerciseID)
+    )].slice(0, 10);
+    return exerciseIds.map(id => {
+      const ex = exById(id) || { ExerciseName: id };
+      const bestToday = bestSet(sets.filter(s => s.ExerciseID === id && String(s.Date || '').slice(0, 10) === today));
+      const bestWeek = bestSet(sets.filter(s => s.ExerciseID === id && String(s.Date || '').slice(0, 10) >= ws));
+      const bestOverall = bestSet(sets.filter(s => s.ExerciseID === id));
+      return { ex, bestToday, bestWeek, bestOverall };
+    }).filter(row => row.bestToday || row.bestWeek || row.bestOverall);
+  }
+
+  function prCell(s) {
+    if (!s) return '-';
+    return (s.UserName === currentUser() ? 'You ' : displayNameFor(s.UserName) + ' ') + formatSetLine(s);
+  }
+
   function nextSetIndex(wid, exId, row) {
     const sess = getSession(wid);
     const arr = sess.sets[exId] || [];
@@ -751,6 +838,30 @@
     return true;
   }
 
+  function addWarmupBlock() {
+    const wid = ensureTodayRoutine(state.workoutId);
+    const existing = new Set(rowsForWorkout(wid).map(r => r.ExerciseID));
+    let order = rowsForWorkout(wid).length + 1;
+    let added = 0;
+    WARMUP_BLOCK.forEach(([exId, target, rest, note]) => {
+      if (existing.has(exId) || !exById(exId)) return;
+      const row = {
+        WorkoutDayID: uid('WD'),
+        WorkoutID: wid,
+        Order: String(order++),
+        ExerciseID: exId,
+        TargetSets: '1',
+        TargetRepsOrTime: target,
+        RestSeconds: String(rest),
+        Optional: 'Yes',
+        Notes: 'Warm-up: ' + note,
+      };
+      appendAndPost('appendWorkoutDay', state.days, row);
+      added++;
+    });
+    return added;
+  }
+
   function latestDayNote() {
     return allJournal().filter(j => j.UserName === currentUser() && String(j.Date).slice(0, 10) === todayStr() && j.Journal && j.Mood === 'Note')
       .sort((a, b) => String(b.UpdatedAt || '').localeCompare(String(a.UpdatedAt || '')))[0];
@@ -798,6 +909,7 @@
         const done = sess.sets[row.ExerciseID] || [];
         const vid = videoIdOf(ex);
         const ready = progressionReady(row.ExerciseID, nSets) && ex.Progression;
+        const nudge = progressionNudgeFor(row.ExerciseID);
         let setRows = '';
         for (let i = 0; i < Math.max(nSets, done.length); i++) {
           const st = done[i] || { count: repsDefault(row.TargetRepsOrTime), done: false };
@@ -825,6 +937,7 @@
             '<span class="excard-target">' + esc(row.TargetSets) + ' × ' + esc(row.TargetRepsOrTime) + '</span>' +
           '</div>' +
           (ex.CoachingCues ? '<div class="excard-cues">' + esc(ex.CoachingCues) + '</div>' : '') +
+          (nudge ? '<div class="nudge"><span><i data-lucide="trending-up"></i>' + esc(nudge.text) + '</span><button data-action="dismiss-nudge" data-key="' + esc(nudge.key) + '" aria-label="Dismiss suggestion">x</button></div>' : '') +
           (ex.StopIf ? '<div class="excard-stopif"><i data-lucide="octagon-alert"></i>Stop if: ' + esc(ex.StopIf) + '</div>' : '') +
           '<div class="setrows">' + setRows + '</div>' +
           '<div class="videowrap" id="vid-' + esc(row.ExerciseID) + '" hidden></div>' +
@@ -863,8 +976,10 @@
       '<div class="chiprow">' + chips + '</div>' +
       '<div class="actionrow">' +
         '<button class="toolbtn actiontool" data-action="customize-today"><i data-lucide="copy-plus"></i>' + (isTodayWorkout(wid) ? 'Today routine' : 'Customize today') + '</button>' +
+        '<button class="toolbtn actiontool" data-action="add-warmup"><i data-lucide="sparkles"></i>Warm-up</button>' +
         '<button class="toolbtn actiontool" data-action="open-add-exercise"><i data-lucide="search"></i>Add exercise</button>' +
         '<button class="toolbtn actiontool" data-action="open-voice-log"><i data-lucide="mic"></i>Quick log</button>' +
+        '<button class="toolbtn actiontool" data-action="open-tools"><i data-lucide="calculator"></i>Tools</button>' +
       '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
       cards +
@@ -1061,6 +1176,7 @@
     sets.forEach(s => { if (String(s.Date) >= ws) { users[s.UserName] = users[s.UserName] || { sets: 0, km: 0 }; users[s.UserName].sets++; } });
     runs.forEach(r => { if (String(r.Date) >= ws) { users[r.UserName] = users[r.UserName] || { sets: 0, km: 0 }; users[r.UserName].km += Number(r.Distance_km || 0); } });
     const friends = Object.entries(users).sort((a, b) => (b[1].sets + b[1].km) - (a[1].sets + a[1].km));
+    const prs = prBoards();
 
     return (
       '<div class="eyebrow">Quiet momentum</div>' +
@@ -1091,6 +1207,10 @@
       (friends.length ? '<div class="section-label">The club, this week</div>' +
         '<table class="datatable"><tr><th>Who</th><th class="num">sets</th><th class="num">km</th></tr>' +
         friends.map(([u, s]) => '<tr' + (u === me ? ' class="me"' : '') + '><td>' + esc(displayNameFor(u)) + '</td><td class="num">' + s.sets + '</td><td class="num">' + s.km.toFixed(1) + '</td></tr>').join('') +
+        '</table>' : '') +
+      (prs.length ? '<div class="section-label">PR compare</div>' +
+        '<table class="datatable prtable"><tr><th>Exercise</th><th class="num">today</th><th class="num">week</th><th class="num">overall</th></tr>' +
+        prs.map(row => '<tr><td>' + esc(row.ex.ExerciseName) + '</td><td class="num">' + esc(prCell(row.bestToday)) + '</td><td class="num">' + esc(prCell(row.bestWeek)) + '</td><td class="num">' + esc(prCell(row.bestOverall)) + '</td></tr>').join('') +
         '</table>' : '') +
       (state.source === 'local' && !CFG.sheetId ?
         '<div class="card mt24"><div class="badge"><i data-lucide="plug"></i>Local mode</div>' +
@@ -1264,6 +1384,48 @@
     const input = $('#voiceText'); if (input) input.focus();
   }
 
+  function openTools() {
+    openModal(
+      '<div class="sheet-title">Gym tools</div>' +
+      '<div class="sheet-sub">Fast calculators for machine, barbell, or home work.</div>' +
+      '<div class="section-label" style="margin-top:4px">Plate math</div>' +
+      '<div class="formgrid">' +
+        '<label><span class="formlabel">Target lb</span><input id="toolTarget" type="number" inputmode="decimal" value="135"></label>' +
+        '<label><span class="formlabel">Bar lb</span><input id="toolBar" type="number" inputmode="decimal" value="45"></label>' +
+      '</div>' +
+      '<div class="calc-result"><div class="calc-box"><div class="v" id="plateSide">45</div><div class="l">per side</div></div>' +
+      '<div class="calc-box"><div class="v" id="plateHint">45</div><div class="l">simple load</div></div></div>' +
+      '<div class="section-label">Strength estimate</div>' +
+      '<div class="formgrid">' +
+        '<label><span class="formlabel">Weight lb</span><input id="toolWeight" type="number" inputmode="decimal" value="135"></label>' +
+        '<label><span class="formlabel">Reps</span><input id="toolReps" type="number" inputmode="numeric" value="8"></label>' +
+      '</div>' +
+      '<div class="calc-result"><div class="calc-box"><div class="v" id="oneRm">171</div><div class="l">est. 1RM</div></div>' +
+      '<div class="calc-box"><div class="v" id="nextSet">140 x 8</div><div class="l">small jump</div></div></div>' +
+      '<button class="bigbtn subtle mt16" data-action="close-modal">Close</button>'
+    );
+    updateToolsCalc();
+  }
+
+  function updateToolsCalc() {
+    const target = Number((($('#toolTarget') || {}).value) || 0);
+    const bar = Number((($('#toolBar') || {}).value) || 0);
+    const side = Math.max(0, (target - bar) / 2);
+    const plates = [45, 35, 25, 10, 5, 2.5];
+    let rem = side, load = [];
+    plates.forEach(p => {
+      const n = Math.floor((rem + 0.001) / p);
+      if (n) { load.push(n + 'x' + p); rem -= n * p; }
+    });
+    if ($('#plateSide')) $('#plateSide').textContent = side ? side.toFixed(side % 1 ? 1 : 0) : '-';
+    if ($('#plateHint')) $('#plateHint').textContent = load.length ? load.join(' + ') : 'empty';
+    const w = Number((($('#toolWeight') || {}).value) || 0);
+    const reps = Number((($('#toolReps') || {}).value) || 0);
+    const est = w && reps ? Math.round(w * (1 + reps / 30)) : 0;
+    if ($('#oneRm')) $('#oneRm').textContent = est || '-';
+    if ($('#nextSet')) $('#nextSet').textContent = w ? (Math.round((w + 5) * 10) / 10) + ' x ' + (reps || '?') : '-';
+  }
+
   function startVoiceInput() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { toast('Voice recognition is not available here. Type it instead.', 'mic-off', true); return; }
@@ -1288,6 +1450,7 @@
     const draft = parseVoiceLog(phrase);
     if (!draft.exercise) { toast('I could not match an exercise. Try a clearer exercise name.', 'circle-alert', true); return; }
     if (!draft.reps) { toast('Add reps, like "eight reps".', 'circle-alert', true); return; }
+    const priorBest = previousBestFor(draft.exercise.ExerciseID);
     const rec = {
       LogID: uid('SET'), UserName: currentUser(), Date: todayStr(),
       ExerciseID: draft.exercise.ExerciseID, ExerciseName: draft.exercise.ExerciseName,
@@ -1295,10 +1458,11 @@
       Weight_lb: draft.weight || '', RPE_1_10: '', Pain_0_10: 0,
       Completed: true, Notes: 'Quick log: ' + phrase, UpdatedAt: new Date().toISOString(),
     };
+    if (!priorBest || setScore(rec) > setScore(priorBest)) rec.Notes += ' PR';
     const logs = lsGet('ef_setlogs', []); logs.push(rec); lsSet('ef_setlogs', logs);
     post('appendExerciseLog', rec).then(() => updateSyncBadge());
     closeModal();
-    toast('Quick logged: ' + draft.exercise.ExerciseName + '.', 'mic');
+    toast((rec.Notes.includes('PR') ? 'New PR: ' : 'Quick logged: ') + draft.exercise.ExerciseName + '.', rec.Notes.includes('PR') ? 'trophy' : 'mic');
     render();
   }
 
@@ -1370,6 +1534,7 @@
     const det = sess.details[exId] || {};
     const st = (sess.sets[exId] || [])[i] || { count: 0 };
     const pain = Number(det.pain || 0);
+    const priorBest = previousBestFor(exId);
     const rec = {
       LogID: uid('SET'), UserName: currentUser(), Date: todayStr(),
       ExerciseID: exId, ExerciseName: ex.ExerciseName || exId,
@@ -1377,8 +1542,11 @@
       ActualReps: st.count, Weight_lb: det.weight || '', RPE_1_10: det.rpe || '',
       Pain_0_10: det.pain || 0, Completed: true, Notes: '', UpdatedAt: new Date().toISOString(),
     };
+    const isPr = Number(rec.ActualReps || 0) > 0 && (!priorBest || setScore(rec) > setScore(priorBest));
+    if (isPr) rec.Notes = 'PR';
     const logs = lsGet('ef_setlogs', []); logs.push(rec); lsSet('ef_setlogs', logs);
     post('appendExerciseLog', rec).then(ok => updateSyncBadge());
+    if (isPr) toast('New PR: ' + (ex.ExerciseName || exId) + ' - ' + formatSetLine(rec), 'trophy');
     if (pain >= 6) {
       toast('Pain ' + pain + '/10 — stop this movement. Try ' + (ex.Regression || 'an easier version') + ' instead.', 'octagon-alert', true);
     } else if (pain === 5) {
@@ -1539,8 +1707,14 @@
       toast('Today\'s routine is ready for ' + displayNameFor(currentUser()) + '.', 'copy-plus');
       render();
     }
+    else if (a === 'add-warmup') {
+      const added = addWarmupBlock();
+      toast(added ? 'Warm-up added to today.' : 'Warm-up is already in today.', added ? 'sparkles' : 'check-circle-2');
+      render();
+    }
     else if (a === 'open-add-exercise') { openAddExercise(); }
     else if (a === 'open-voice-log') { openVoiceLog(); }
+    else if (a === 'open-tools') { openTools(); }
     else if (a === 'add-routine-exercise') {
       if (addExerciseToRoutine(btn.dataset.id)) {
         closeModal();
@@ -1605,6 +1779,7 @@
     }
 
     else if (a === 'toggle-details') { const el = $('#det-' + btn.dataset.ex); el.hidden = !el.hidden; }
+    else if (a === 'dismiss-nudge') { dismissNudge(btn.dataset.key); render(); }
     else if (a === 'motion-set') { startMotionSet(btn.dataset.ex, btn.dataset.wd); }
     else if (a === 'rest') { startRest(Number(btn.dataset.sec) || 60); }
     else if (a === 'walk-timer') { startRest((Number(btn.dataset.min) || 20) * 60, 'walk'); toast('Walk timer running — enjoy it out there.', 'footprints'); }
@@ -1718,6 +1893,7 @@
         $('#calcSpeed').textContent = (dist / (mins / 60)).toFixed(2);
       }
     }
+    if (['toolTarget', 'toolBar', 'toolWeight', 'toolReps'].includes(ev.target.id)) updateToolsCalc();
   });
 
   /* modal scrim + effort/pain selection (delegated inside modal) */

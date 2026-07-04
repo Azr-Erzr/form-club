@@ -20,7 +20,14 @@ YouTube       = form videos (links/embeds only)
 - **Today** - the day's workout, set counters, rest timer, form videos, pain guardrails, workout notes, and add-to-routine search
 - **Library** - 950 searchable exercises with cues, regressions, progressions, machine/cable filters, and form videos
 - **Run** - distance/time in, pace/speed out, friendly weekly comparison
-- **Progress** - weekly stats, streak, push-up ladder, back-pain trend, club table
+- **Progress** - weekly stats, streak, push-up ladder, back-pain trend, club table, and PR comparison
+
+## Workout Helpers
+
+- Optional warm-up pill adds a simple full-body prep block to today's profile-owned routine.
+- Gym Tools includes plate math and estimated 1RM calculators.
+- If the same top set repeats for four sessions, a dismissible nudge suggests adding reps, weight, or a harder variation.
+- Personal records are detected from completed set logs and shown in Progress as Today / Week / Overall PR comparisons.
 
 ## Device Features
 
