@@ -40,7 +40,10 @@
 html { font-size: 16px; min-height: 100%; background: var(--noir); }
 
 body {
-  background: var(--noir);
+  background:
+    linear-gradient(180deg, rgba(198, 161, 91, 0.035), transparent 22rem),
+    repeating-linear-gradient(90deg, rgba(242,236,223,0.018) 0 1px, transparent 1px 48px),
+    var(--noir);
   color: var(--ivory);
   font-family: var(--sans);
   font-weight: 300;
@@ -157,8 +160,10 @@ select { background-image: none; }
 
 /* ---------- cards ---------- */
 .card {
-  background: var(--espresso); border: 1px solid var(--hairline-soft);
+  background: linear-gradient(160deg, rgba(46,42,37,0.92), rgba(29,27,24,0.96));
+  border: 1px solid var(--hairline-soft);
   border-radius: var(--radius); padding: 18px; margin-bottom: 14px;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.22);
 }
 .card-gold { border-color: var(--hairline); }
 
@@ -188,6 +193,27 @@ select { background-image: none; }
   padding: 4px 10px; border-radius: 999px; font-weight: 400;
 }
 .badge-gold { color: var(--champagne); border-color: var(--hairline); }
+
+.minihead {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--champagne); margin-bottom: 12px;
+}
+.infobtn {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--taupe); border: 1px solid var(--hairline-soft);
+}
+.infobtn svg { width: 16px; height: 16px; }
+.prep-card { background: linear-gradient(160deg, rgba(198,161,91,0.1), rgba(38,35,31,0.82)); }
+.prepgrid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.prepitem {
+  min-height: 44px; border: 1px solid var(--hairline-soft); border-radius: 12px;
+  color: var(--taupe); display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  text-align: left; background: rgba(242,236,223,0.025);
+}
+.prepitem svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.prepitem.checked { color: var(--ivory); border-color: rgba(138,155,110,0.55); background: rgba(138,155,110,0.12); }
+.prepitem.checked svg { color: var(--sage); }
 
 /* ---------- exercise card (Today) ---------- */
 .excard { padding: 0; overflow: hidden; }
@@ -296,7 +322,16 @@ select { background-image: none; }
 
 /* ---------- stats ---------- */
 .statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stat { background: var(--espresso); border: 1px solid var(--hairline-soft); border-radius: var(--radius); padding: 16px; }
+.stat {
+  background: linear-gradient(180deg, rgba(198,161,91,0.085), rgba(29,27,24,0.96));
+  border: 1px solid var(--hairline-soft); border-radius: var(--radius); padding: 16px;
+  position: relative; overflow: hidden;
+}
+.stat::after {
+  content: ''; position: absolute; left: 14px; right: 14px; bottom: 10px; height: 1px;
+  background: linear-gradient(90deg, var(--champagne), transparent);
+  opacity: 0.45;
+}
 .stat-num {
   font-family: var(--serif); font-size: 1.9rem; font-weight: 400;
   color: var(--ivory); line-height: 1.1; font-variant-numeric: tabular-nums;
@@ -310,6 +345,8 @@ table.datatable th {
   color: var(--taupe-dim); font-weight: 400; padding: 8px 6px; border-bottom: 1px solid var(--hairline);
 }
 table.datatable td { padding: 10px 6px; border-bottom: 1px solid var(--hairline-soft); font-variant-numeric: tabular-nums; }
+table.datatable tr { transition: background 0.18s ease, color 0.18s ease; }
+table.datatable tr:hover td { background: rgba(198,161,91,0.045); }
 table.datatable td:first-child { color: var(--taupe); }
 table.datatable tr.me td { color: var(--champagne); }
 .num { text-align: right; }

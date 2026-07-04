@@ -25,6 +25,7 @@ YouTube       = form videos (links/embeds only)
 ## Workout Helpers
 
 - Optional warm-up pill adds a simple full-body prep block to today's profile-owned routine.
+- Daily pre-workout checklist tracks creatine, pre-workout, caffeine, protein, and supplements with a dated prep note.
 - Gym Tools includes plate math and estimated 1RM calculators.
 - If the same top set repeats for four sessions, a dismissible nudge suggests adding reps, weight, or a harder variation.
 - Personal records are detected from completed set logs and shown in Progress as Today / Week / Overall PR comparisons.
@@ -88,6 +89,10 @@ window instead of forcing phones to download every historical log row.
 
 `Profile_Stats` tracks manual height, weight, resting heart rate, and notes over
 time without needing Apple Health or another database.
+
+Most logged rows include both the workout `Date` and an `UpdatedAt` timestamp.
+Progress has a small time/history info view for last activity, active days,
+daily prep timing, latest profile stats, and recent submission timestamps.
 
 ## Guardrails
 

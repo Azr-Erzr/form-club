@@ -30,6 +30,13 @@
     ['FE_Hamstring_Stretch', '30 sec/side', 15, 'Easy hamstrings'],
     ['FE_Calf_Stretch_Elbows_Against_Wall', '30 sec/side', 15, 'Ankles and calves'],
   ];
+  const PREP_ITEMS = [
+    ['creatine', 'Creatine'],
+    ['preworkout', 'Pre-workout'],
+    ['caffeine', 'Caffeine'],
+    ['protein', 'Protein shake'],
+    ['vitamins', 'Vitamins / supplements'],
+  ];
 
   function loadSettings() {
     let s = {};
@@ -572,6 +579,9 @@
   function sessionKey(wid) { return 'ef_session_' + userKey(currentUser()) + '_' + todayStr() + '_' + wid; }
   function getSession(wid) { return lsGet(sessionKey(wid), { sets: {}, details: {} }); }
   function setSession(wid, sess) { lsSet(sessionKey(wid), sess); }
+  function prepKey(date) { return 'ef_prep_' + userKey(currentUser()) + '_' + (date || todayStr()); }
+  function getPrep(date) { return lsGet(prepKey(date), { items: {}, updatedAt: '' }); }
+  function setPrep(prep, date) { lsSet(prepKey(date), prep); }
 
   function suggestedWorkoutId() {
     const mine = profileWorkouts();
@@ -887,6 +897,7 @@
     const workout = mine.find(w => w.WorkoutID === wid);
     const sugg = suggestedWorkoutId();
     const sess = getSession(wid);
+    const prep = getPrep();
 
     const chips = mine.map(w =>
       '<button class="chip' + (w.WorkoutID === wid ? ' active' : '') + '" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
@@ -983,6 +994,14 @@
       '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
       cards +
+      '<div class="card mt16 prep-card"><div class="minihead"><span>Pre-workout checklist</span>' +
+        (prep.updatedAt ? '<button class="infobtn" data-action="open-time-info" aria-label="Time info"><i data-lucide="info"></i></button>' : '') + '</div>' +
+        '<div class="prepgrid">' + PREP_ITEMS.map(([key, label]) =>
+          '<button class="prepitem' + (prep.items[key] ? ' checked' : '') + '" data-action="toggle-prep" data-key="' + key + '">' +
+            '<i data-lucide="' + (prep.items[key] ? 'check-circle-2' : 'circle') + '"></i><span>' + esc(label) + '</span></button>'
+        ).join('') + '</div>' +
+        '<div class="resultcount mt8">' + (prep.dirty ? 'Unsaved changes' : (prep.updatedAt ? 'Updated ' + esc(timeAgo(new Date(prep.updatedAt).getTime())) : 'Optional - tap what you took today')) + '</div>' +
+        '<button class="bigbtn subtle mt16" data-action="save-prep"><i data-lucide="save"></i>Save checklist</button></div>' +
       '<div class="card mt16"><label class="full"><span class="formlabel">Today\'s notes</span>' +
         '<textarea id="dayNotes" rows="3" placeholder="How this workout felt, swaps, reminders for next time...">' + esc((latestDayNote() || {}).Journal || '') + '</textarea></label>' +
         '<button class="bigbtn subtle mt16" data-action="save-day-note"><i data-lucide="notebook-pen"></i>Save note</button></div>' +
@@ -1180,7 +1199,7 @@
 
     return (
       '<div class="eyebrow">Quiet momentum</div>' +
-      '<h1 class="pagetitle">Progress</h1>' +
+      '<div class="titlerow"><h1 class="pagetitle">Progress</h1><button class="infobtn" data-action="open-time-info" aria-label="Time and history info"><i data-lucide="info"></i></button></div>' +
       '<p class="pagesub">Consistency beats intensity. Here is ' + esc(displayNameFor(me)) + '\'s.</p>' +
       '<div class="statgrid">' +
         '<div class="stat"><div class="stat-num">' + workoutsWeek + '</div><div class="stat-label">workouts this week</div></div>' +
@@ -1407,6 +1426,30 @@
     updateToolsCalc();
   }
 
+  function openTimeInfo() {
+    const sets = allSets().filter(s => s.UserName === currentUser()).sort((a, b) => String(b.UpdatedAt || b.Date || '').localeCompare(String(a.UpdatedAt || a.Date || '')));
+    const runs = allRuns().filter(r => r.UserName === currentUser()).sort((a, b) => String(b.UpdatedAt || b.Date || '').localeCompare(String(a.UpdatedAt || a.Date || '')));
+    const stats = profileStatsFor(currentUser());
+    const prep = getPrep();
+    const activeDays = new Set(sets.map(s => String(s.Date).slice(0, 10)).concat(runs.map(r => String(r.Date).slice(0, 10))));
+    const lastActivity = [sets[0], runs[0]].filter(Boolean).sort((a, b) => String(b.Date || '').localeCompare(String(a.Date || '')))[0];
+    const daysSince = lastActivity ? Math.max(0, Math.round((Date.now() - new Date(String(lastActivity.Date).slice(0, 10) + 'T12:00:00').getTime()) / 86400000)) : null;
+    const recent = sets.slice(0, 6);
+    openModal(
+      '<div class="sheet-title">Time & history</div>' +
+      '<div class="sheet-sub">Dates come from the workout day; submitted time comes from UpdatedAt when the row was saved.</div>' +
+      '<div class="kv"><span class="k">Last activity</span><span class="v">' + esc(lastActivity ? shortDate(lastActivity.Date) + (daysSince ? ' - ' + daysSince + ' days ago' : ' - today') : 'none yet') + '</span></div>' +
+      '<div class="kv"><span class="k">Active days</span><span class="v">' + activeDays.size + ' logged day' + (activeDays.size === 1 ? '' : 's') + '</span></div>' +
+      '<div class="kv"><span class="k">Prep today</span><span class="v">' + esc(prep.dirty ? 'edited, not saved' : (prep.updatedAt ? 'saved ' + timeAgo(new Date(prep.updatedAt).getTime()) : 'not saved yet')) + '</span></div>' +
+      '<div class="kv"><span class="k">Latest stats</span><span class="v">' + esc(stats[0] ? shortDate(stats[0].Date) + ' - ' + [stats[0].BodyWeight_lb && stats[0].BodyWeight_lb + ' lb', stats[0].RestingHR_bpm && stats[0].RestingHR_bpm + ' bpm'].filter(Boolean).join(', ') : 'none yet') + '</span></div>' +
+      '<div class="section-label">Recent submissions</div>' +
+      (recent.length ? '<table class="datatable"><tr><th>Date</th><th>Exercise</th><th class="num">Set</th></tr>' +
+        recent.map(s => '<tr><td>' + esc(shortDate(s.Date)) + '</td><td>' + esc(s.ExerciseName || s.ExerciseID) + '</td><td class="num">' + esc(formatSetLine(s)) + '</td></tr>').join('') + '</table>' :
+        '<div class="empty"><i data-lucide="clock"></i><div>No set submissions yet.</div></div>') +
+      '<button class="bigbtn subtle mt16" data-action="close-modal">Close</button>'
+    );
+  }
+
   function updateToolsCalc() {
     const target = Number((($('#toolTarget') || {}).value) || 0);
     const bar = Number((($('#toolBar') || {}).value) || 0);
@@ -1605,6 +1648,26 @@
     render();
   }
 
+  function savePrepChecklist() {
+    const prep = getPrep();
+    const taken = PREP_ITEMS.filter(([key]) => prep.items[key]).map(([, label]) => label);
+    prep.updatedAt = new Date().toISOString();
+    prep.dirty = false;
+    setPrep(prep);
+    if (taken.length) {
+      const rec = {
+        EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
+        Mood: 'Prep', Energy_1_10: '', SleepHours: '', BackPain_0_10: '', BodyWeight_lb: '',
+        CaloriesEstimate: '', ProteinEstimate_g: '',
+        Journal: 'Pre-workout: ' + taken.join(', '), UpdatedAt: prep.updatedAt,
+      };
+      const logs = lsGet('ef_journal', []); logs.push(rec); lsSet('ef_journal', logs);
+      post('appendJournal', rec).then(() => updateSyncBadge());
+    }
+    toast('Pre-workout checklist saved.', 'check-circle-2');
+    render();
+  }
+
   function saveNewProfile() {
     const display = (($('#newProfileName') || {}).value || '').trim();
     if (!display) { toast('Profile name first.', 'circle-alert', true); return; }
@@ -1715,6 +1778,7 @@
     else if (a === 'open-add-exercise') { openAddExercise(); }
     else if (a === 'open-voice-log') { openVoiceLog(); }
     else if (a === 'open-tools') { openTools(); }
+    else if (a === 'open-time-info') { openTimeInfo(); }
     else if (a === 'add-routine-exercise') {
       if (addExerciseToRoutine(btn.dataset.id)) {
         closeModal();
@@ -1809,6 +1873,7 @@
     else if (a === 'lib-more') { state.lib.limit = (state.lib.limit || 120) + 200; render(); }
     else if (a === 'save-run') { saveRun(); }
     else if (a === 'save-day-note') { saveDayNote(); }
+    else if (a === 'save-prep') { savePrepChecklist(); }
     else if (a === 'save-journal') { saveDayNote(); }
     else if (a === 'listen-voice') { startVoiceInput(); }
     else if (a === 'save-voice-log') { saveVoiceLog(); }
@@ -1831,6 +1896,13 @@
     else if (a === 'open-add-profile') { openAddProfile(); }
     else if (a === 'save-new-profile') { saveNewProfile(); }
     else if (a === 'save-profile-stats') { saveProfileStats(); }
+    else if (a === 'toggle-prep') {
+      const prep = getPrep();
+      prep.items[btn.dataset.key] = !prep.items[btn.dataset.key];
+      prep.dirty = true;
+      setPrep(prep);
+      render();
+    }
     else if (a === 'save-settings') {
       saveSettings({ user: $('#setUser').value.trim() || 'Azhar', sheetId: $('#setSheet').value.trim(), scriptUrl: $('#setScript').value.trim() });
       state.workoutId = null;
