@@ -1,0 +1,37 @@
+WorkoutDayID,WorkoutID,Order,ExerciseID,TargetSets,TargetRepsOrTime,RestSeconds,Optional,Notes
+WD001,HOME_A,1,EX0004,2,8-15 reps,60,No,Sit back to the chair — tap and stand
+WD002,HOME_A,2,EX0002,2,8-12 reps,60,No,Counter height — full range beats reps
+WD003,HOME_A,3,EX0016,2,10-12 reps,60,No,One arm at a time braced on a chair
+WD004,HOME_A,4,EX0008,2,10-15 reps,45,No,Squeeze glutes at the top — no back arch
+WD005,HOME_A,5,EX0009,2,6 per side,45,No,Low back stays pressed to the floor
+WD006,HOME_A,6,EX0014,1,3 min,0,Yes,Easy finisher — swing the arms
+WD011,HOME_B,1,EX0006,2,6-10 per side,60,No,Hold a counter or wall for balance
+WD012,HOME_B,2,EX0002,2,8-12 reps,60,No,Same push as day A — practice makes progress
+WD013,HOME_B,3,EX0015,2,30-40 steps,60,No,Heavy-ish objects work — stand tall
+WD014,HOME_B,4,EX0010,2,6 per side,45,No,Slow and steady — no hip wobble
+WD015,HOME_B,5,EX0011,2,15-30 sec per side,45,No,Straight line from knees to shoulders
+WD016,HOME_B,6,EX0013,1,8 slow rounds,0,Yes,Breathe — this is dessert not work
+WD021,BACK_RESET,1,EX0012,1,10 slow reps,20,No,Small gentle rocking of the pelvis
+WD022,BACK_RESET,2,EX0013,1,8 rounds,20,No,Move with the breath
+WD023,BACK_RESET,3,EX0022,1,45-60 sec,20,No,Sink back and let everything relax
+WD024,BACK_RESET,4,EX0010,2,5 per side,30,No,Quality over reps
+WD025,BACK_RESET,5,EX0021,1,30 sec per side,0,No,Tuck the tailbone slightly to feel it
+WD031,MIN_DAY,1,EX0083,1,10 min,0,No,Any pace — outside beats perfect
+WD032,MIN_DAY,2,EX0012,1,10 reps,30,No,Easy reset for the back
+WD033,MIN_DAY,3,EX0001,1,8-12 reps,0,No,Just practice — one easy set
+WD041,GYM_PUSH,1,EX0045,3,8-12 reps,90,No,Seat set so handles meet mid-chest
+WD042,GYM_PUSH,2,EX0048,3,8-12 reps,90,No,30-45 degree incline
+WD043,GYM_PUSH,3,EX0052,3,10-12 reps,75,No,Back stays on the pad
+WD044,GYM_PUSH,4,EX0053,2,12-15 reps,60,No,Light weight — lead with the elbow
+WD045,GYM_PUSH,5,EX0056,2,12-15 reps,60,No,Elbows pinned to sides
+WD051,GYM_PULL,1,EX0059,3,8-12 reps,90,No,Pull to the collarbone — no leaning back
+WD052,GYM_PULL,2,EX0063,3,10-12 reps,90,No,Chest up — squeeze the shoulder blades
+WD053,GYM_PULL,3,EX0064,3,10-12 reps,75,No,Chest supported keeps the back happy
+WD054,GYM_PULL,4,EX0067,2,12-15 reps,60,No,Pull rope to the face — thumbs back
+WD055,GYM_PULL,5,EX0070,2,10-12 reps,60,No,No swinging
+WD061,GYM_LEGS,1,EX0027,3,10-12 reps,120,No,Feet mid-platform — never lock knees hard
+WD062,GYM_LEGS,2,EX0026,3,8-12 reps,90,No,Elbows track inside the knees
+WD063,GYM_LEGS,3,EX0036,3,10-12 reps,75,No,Control the release
+WD064,GYM_LEGS,4,EX0037,2,12-15 reps,60,No,Pause at the top
+WD065,GYM_LEGS,5,EX0038,2,12-15 reps,60,No,Full stretch at the bottom
+WD066,GYM_LEGS,6,EX0075,2,10 per side,45,Yes,Anti-rotation core to finish

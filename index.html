@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>Form — Exercise Club</title>
+  <meta name="description" content="A quiet little club for workouts, walks and honest logging.">
+  <meta name="theme-color" content="#131211">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Form">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="wordmark">
+        <span class="wordmark-main">Form</span>
+        <span class="wordmark-sub">exercise club</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="iconbtn" id="syncBtn" aria-label="Sync status">
+          <i data-lucide="cloud"></i><span class="sync-badge" id="syncBadge" hidden></span>
+        </button>
+        <button class="iconbtn" id="settingsBtn" aria-label="Settings">
+          <i data-lucide="settings-2"></i>
+        </button>
+      </div>
+    </header>
+
+    <main id="view" class="view"></main>
+
+    <div id="restbar" class="restbar" hidden>
+      <i data-lucide="timer"></i>
+      <div class="restbar-time" id="restTime">0:60</div>
+      <div class="restbar-label">rest</div>
+      <button class="restbar-btn" id="restAdd">+15</button>
+      <button class="restbar-btn restbar-skip" id="restSkip">skip</button>
+    </div>
+
+    <nav class="tabbar" id="tabbar">
+      <button class="tab active" data-tab="today"><i data-lucide="dumbbell"></i><span>Today</span></button>
+      <button class="tab" data-tab="library"><i data-lucide="book-open"></i><span>Library</span></button>
+      <button class="tab" data-tab="run"><i data-lucide="footprints"></i><span>Run</span></button>
+      <button class="tab" data-tab="progress"><i data-lucide="trending-up"></i><span>Progress</span></button>
+      <button class="tab" data-tab="journal"><i data-lucide="notebook-pen"></i><span>Journal</span></button>
+    </nav>
+
+    <div id="modal" class="modal" hidden>
+      <div class="modal-scrim" id="modalScrim"></div>
+      <div class="modal-sheet" id="modalSheet"></div>
+    </div>
+
+    <div id="toasts" class="toasts"></div>
+  </div>
+
+  <script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
