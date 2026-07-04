@@ -31,11 +31,13 @@
   --sans: 'Outfit', -apple-system, sans-serif;
   --radius: 14px;
   --tabbar-h: calc(64px + env(safe-area-inset-bottom, 0px));
+  --pad-left: max(20px, env(safe-area-inset-left, 0px));
+  --pad-right: max(20px, env(safe-area-inset-right, 0px));
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-html { font-size: 16px; }
+html { font-size: 16px; min-height: 100%; background: var(--noir); }
 
 body {
   background: var(--noir);
@@ -45,11 +47,14 @@ body {
   line-height: 1.5;
   overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
 
 #app { max-width: 480px; margin: 0 auto; min-height: 100dvh; position: relative; }
 
-button { font-family: var(--sans); border: none; background: none; color: inherit; cursor: pointer; }
+button { font-family: var(--sans); border: none; background: none; color: inherit; cursor: pointer; touch-action: manipulation; }
 input, select, textarea {
   font-family: var(--sans); font-weight: 300; font-size: 1rem;
   background: var(--espresso); color: var(--ivory);
@@ -59,12 +64,13 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { border-color: var(--champagne); }
 input::placeholder, textarea::placeholder { color: var(--taupe-dim); }
+input, textarea { -webkit-user-select: text; user-select: text; }
 select { background-image: none; }
 
 /* ---------- top bar ---------- */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: calc(14px + env(safe-area-inset-top, 0px)) 20px 12px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) var(--pad-right) 12px var(--pad-left);
   position: sticky; top: 0; z-index: 30;
   background: linear-gradient(to bottom, var(--noir) 75%, transparent);
 }
@@ -77,7 +83,15 @@ select { background-image: none; }
   font-size: 0.62rem; letter-spacing: 0.32em; text-transform: uppercase;
   color: var(--champagne); font-weight: 400;
 }
-.topbar-actions { display: flex; gap: 4px; }
+.topbar-actions { display: flex; align-items: center; gap: 4px; }
+.profilebtn {
+  min-width: 0; max-width: 112px; height: 34px; padding: 0 12px;
+  border: 1px solid var(--hairline-soft); border-radius: 999px;
+  color: var(--champagne); background: rgba(198, 161, 91, 0.08);
+  font-size: 0.74rem; font-weight: 500; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.profilebtn:active { background: var(--champagne-soft); }
 .iconbtn {
   width: 42px; height: 42px; border-radius: 50%;
   display: grid; place-items: center; color: var(--taupe); position: relative;
@@ -85,14 +99,16 @@ select { background-image: none; }
 .iconbtn:active { background: var(--walnut); }
 .iconbtn svg { width: 20px; height: 20px; }
 .iconbtn.synced { color: var(--sage); }
+.iconbtn.busy svg { animation: spin 0.9s linear infinite; }
 .sync-badge {
   position: absolute; top: 5px; right: 5px; min-width: 15px; height: 15px;
   border-radius: 8px; background: var(--terracotta); color: var(--ivory);
   font-size: 0.6rem; font-weight: 600; display: grid; place-items: center; padding: 0 3px;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- layout ---------- */
-.view { padding: 4px 20px calc(var(--tabbar-h) + 96px); }
+.view { padding: 4px var(--pad-right) calc(var(--tabbar-h) + 96px) var(--pad-left); }
 
 .eyebrow {
   font-size: 0.62rem; letter-spacing: 0.3em; text-transform: uppercase;
@@ -121,6 +137,13 @@ select { background-image: none; }
 .challenge.done .challenge-count { color: var(--sage); }
 .challenge.done .challenge-count svg { width: 15px; height: 15px; }
 .challenge.done .hairbar span { background: var(--sage); }
+
+.imgstrip { display: flex; gap: 10px; margin: 4px 0 12px; }
+.imgstrip img {
+  width: calc(50% - 5px); aspect-ratio: 4 / 3; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--hairline-soft);
+  background: var(--walnut); filter: saturate(0.85);
+}
 
 .view > * { animation: fadeup 0.3s ease both; }
 @keyframes fadeup { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -262,6 +285,7 @@ table.datatable th {
 }
 table.datatable td { padding: 10px 6px; border-bottom: 1px solid var(--hairline-soft); font-variant-numeric: tabular-nums; }
 table.datatable td:first-child { color: var(--taupe); }
+table.datatable tr.me td { color: var(--champagne); }
 .num { text-align: right; }
 th.num { text-align: right; }
 
@@ -285,7 +309,7 @@ th.num { text-align: right; }
 /* ---------- rest bar ---------- */
 .restbar {
   position: fixed; bottom: var(--tabbar-h); left: 50%; transform: translateX(-50%);
-  width: calc(100% - 24px); max-width: 456px; z-index: 40;
+  width: calc(100% - var(--pad-left) - var(--pad-right)); max-width: 456px; z-index: 40;
   display: flex; align-items: center; gap: 12px;
   background: var(--walnut-2); border: 1px solid var(--hairline);
   border-radius: var(--radius); padding: 12px 16px; margin-bottom: 10px;
@@ -304,7 +328,7 @@ th.num { text-align: right; }
 .tabbar {
   position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
   width: 100%; max-width: 480px; height: var(--tabbar-h); z-index: 50;
-  display: flex; padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex; padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   background: rgba(19, 18, 17, 0.92);
   -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   border-top: 1px solid var(--hairline-soft);
@@ -325,7 +349,7 @@ th.num { text-align: right; }
   width: 100%; max-width: 480px; max-height: 88dvh; overflow-y: auto;
   background: var(--espresso); border: 1px solid var(--hairline);
   border-bottom: none; border-radius: 22px 22px 0 0;
-  padding: 10px 22px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 10px max(22px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(22px, env(safe-area-inset-left, 0px));
   animation: sheetup 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 @keyframes sheetup { from { transform: translate(-50%, 40px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }

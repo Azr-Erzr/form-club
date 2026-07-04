@@ -1,8 +1,8 @@
-WorkoutID,WorkoutName,Goal,Level,Location,EstimatedMinutes,Description,BackWarning,Active
-HOME_A,Foundation A,Fat loss + strength,Beginner,Home,35,"Squat, push, pull, hinge, core",Stop any set if back pain goes above 5/10,Yes
-HOME_B,Foundation B,Fat loss + strength,Beginner,Home,35,"Lunge, push, carry, core, mobility",Stop any set if back pain goes above 5/10,Yes
-BACK_RESET,Back Reset Circuit,Low-back relief + mobility,Beginner,Home,15,Gentle circuit for stiff or cranky back days,All movements should be pain-free — ease off range if not,Yes
-MIN_DAY,Minimum Day,Keep the streak alive,Beginner,Home,15,"Short walk, easy core, easy push practice",None — this day is meant to be easy,Yes
-GYM_PUSH,Gym Push Day,Strength,Novice,Gym,50,"Chest, shoulders, triceps",Keep loads controlled and brace before every press,Yes
-GYM_PULL,Gym Pull Day,Strength,Novice,Gym,50,"Back, rear delts, biceps",Chest-supported options are back-safest,Yes
-GYM_LEGS,Gym Leg Day,Strength,Novice,Gym,55,"Quads, glutes, hamstrings, calves, core",Skip anything that loads a rounded spine,Yes
+WorkoutID,WorkoutName,Goal,Level,Location,EstimatedMinutes,Description,BackWarning,Active,UserName
+HOME_A,Foundation A,Fat loss + strength,Beginner,Home,35,"Squat, push, pull, hinge, core",Stop any set if back pain goes above 5/10,Yes,Azhar
+HOME_B,Foundation B,Fat loss + strength,Beginner,Home,35,"Lunge, push, carry, core, mobility",Stop any set if back pain goes above 5/10,Yes,Azhar
+BACK_RESET,Back Reset Circuit,Low-back relief + mobility,Beginner,Home,15,Gentle circuit for stiff or cranky back days,All movements should be pain-free -- ease off range if not,Yes,Azhar
+MIN_DAY,Minimum Day,Keep the streak alive,Beginner,Home,15,"Short walk, easy core, easy push practice",None -- this day is meant to be easy,Yes,Azhar
+GYM_PUSH,Gym Push Day,Strength,Novice,Gym,50,"Chest, shoulders, triceps",Keep loads controlled and brace before every press,Yes,Azhar
+GYM_PULL,Gym Pull Day,Strength,Novice,Gym,50,"Back, rear delts, biceps",Chest-supported options are back-safest,Yes,Azhar
+GYM_LEGS,Gym Leg Day,Strength,Novice,Gym,55,"Quads, glutes, hamstrings, calves, core",Skip anything that loads a rounded spine,Yes,Azhar

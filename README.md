@@ -40,6 +40,20 @@ Open the GitHub Pages link on your phone → Share → **Add to Home Screen**.
 Set your display name in Settings. Your logs live on your device and (when
 online) in the shared club sheet — display names only, nothing sensitive.
 
+## Profiles
+
+Pick a profile in Settings before logging. Workout plans are profile-specific:
+set `Workouts.UserName` to `Azhar`, `Koby`, `Gianluca`, `Patrick`, or `Adriano`.
+Use `Club` only for a shared template everyone should see. Add the matching
+exercise rows in `Workout_Days` with the same `WorkoutID`.
+
+## Sync cadence
+
+Phones retry queued writes every 30 seconds, refresh club logs every 2 minutes,
+and refresh plans/profiles every 10 minutes or when the app comes back into
+focus. Apps Script de-dupes by `LogID` / `EntryID`, so a flaky retry does not
+append the same set, run, or journal row twice.
+
 ## Guardrails
 
 - Pain 5/10 → hold the level, no progression

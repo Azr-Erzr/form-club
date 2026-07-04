@@ -1,9 +1,12 @@
 /* Form — offline shell */
-const VERSION = 'form-v2';
+const VERSION = 'form-v5';
 const SHELL = [
   './', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'data/exercises.csv', 'data/workouts.csv', 'data/workout_days.csv',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
+  'icons/launch-1290x2796.png', 'icons/launch-1179x2556.png', 'icons/launch-1170x2532.png',
+  'icons/launch-1125x2436.png', 'icons/launch-1242x2688.png', 'icons/launch-828x1792.png',
+  'icons/launch-750x1334.png',
 ];
 
 self.addEventListener('install', (e) => {

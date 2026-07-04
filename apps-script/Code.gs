@@ -53,11 +53,22 @@ function setupSheet() {
   importCsv(ss, 'Workouts', REPO_RAW + 'workouts.csv');
   importCsv(ss, 'Workout_Days', REPO_RAW + 'workout_days.csv');
 
-  // Starter profile row
+  // Starter profile rows
   var users = ss.getSheetByName('Users');
-  if (users.getLastRow() < 2) {
-    users.appendRow(['Azhar', 'Azhar', 'Fat loss + strength', 'Home', 'Beginner', 'Yes']);
+  var existingUsers = {};
+  if (users.getLastRow() > 1) {
+    users.getRange(2, 1, users.getLastRow() - 1, 1).getValues()
+      .forEach(function (row) { if (row[0]) existingUsers[String(row[0])] = true; });
   }
+  [
+    ['Azhar', 'Azhar', 'Fat loss + strength', 'Home', 'Beginner', 'Yes'],
+    ['Koby', 'Koby', '', '', '', 'Yes'],
+    ['Gianluca', 'Gianluca', '', '', '', 'Yes'],
+    ['Patrick', 'Patrick', '', '', '', 'Yes'],
+    ['Adriano', 'Adriano', '', '', '', 'Yes'],
+  ].forEach(function (row) {
+    if (!existingUsers[row[0]]) users.appendRow(row);
+  });
 
   // Drop the default empty sheet if present
   var s1 = ss.getSheetByName('Sheet1');
@@ -92,6 +103,15 @@ function doPost(e) {
       var sh = ss.getSheetByName(sheetName);
       if (!sh) return json({ ok: false, error: 'Missing tab: ' + sheetName + '. Run setupSheet().' });
       var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      var idHeader = body.payload.LogID ? 'LogID' : (body.payload.EntryID ? 'EntryID' : '');
+      var idValue = idHeader ? String(body.payload[idHeader]) : '';
+      var idCol = idHeader ? headers.indexOf(idHeader) + 1 : 0;
+      if (idValue && idCol > 0 && sh.getLastRow() > 1) {
+        var existing = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
+        for (var i = 0; i < existing.length; i++) {
+          if (String(existing[i][0]) === idValue) return json({ ok: true, deduped: true });
+        }
+      }
       var row = headers.map(function (h) {
         var v = body.payload[h];
         return v === undefined || v === null ? '' : v;

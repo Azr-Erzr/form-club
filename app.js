@@ -10,6 +10,12 @@
   /* ---------------- config + storage ---------------- */
 
   const DEFAULTS = { sheetId: '', scriptUrl: '', user: 'Azhar', backSafe: true };
+  const DEFAULT_USERS = ['Azhar', 'Koby', 'Gianluca', 'Patrick', 'Adriano']
+    .map(name => ({ UserName: name, DisplayName: name, Goal: '', TrainingLocation: '', ExperienceLevel: '', Active: 'Yes' }));
+  const READ_REFRESH_MS = 2 * 60 * 1000;
+  const CORE_REFRESH_MS = 10 * 60 * 1000;
+  const WRITE_RETRY_MS = 30 * 1000;
+  const FOCUS_REFRESH_MS = 45 * 1000;
 
   function loadSettings() {
     let s = {};
@@ -25,6 +31,7 @@
   }
 
   let CFG = loadSettings();
+  let syncTimersStarted = false;
 
   function lsGet(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; }
@@ -35,6 +42,18 @@
 
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
+  const TABS = ['today', 'library', 'run', 'progress', 'journal'];
+
+  function initialTab() {
+    const h = String(location.hash || '').replace('#', '').toLowerCase();
+    return TABS.includes(h) ? h : 'today';
+  }
+
+  function markRuntimeClasses() {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    document.documentElement.classList.toggle('standalone', !!standalone);
+    document.documentElement.classList.toggle('ios', /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  }
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -93,17 +112,70 @@
     return m ? m[1] : '';
   }
 
+  /* privacy-friendly player that stays inside the PWA on iOS */
+  function embedUrl(vid) {
+    return 'https://www.youtube-nocookie.com/embed/' + vid + '?playsinline=1&rel=0';
+  }
+
+  const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+  function imagesOf(ex) {
+    return String(ex.Images || '').split('|').filter(Boolean).map(p => IMG_BASE + p);
+  }
+
   /* ---------------- data layer ---------------- */
 
   const state = {
-    tab: 'today',
-    exercises: [], workouts: [], days: [],
+    tab: initialTab(),
+    exercises: [], workouts: [], days: [], users: DEFAULT_USERS.slice(),
     remote: { runs: [], sets: [], journal: [], loaded: false },
     source: 'local',
     lib: { q: '', cat: 'All', place: 'All', diff: 'All' },
     workoutId: null,
     restEnd: 0, restTimer: null,
+    sync: { reading: false, writing: false, lastReadAt: 0, lastWriteAt: 0, lastCoreAt: 0, lastError: '' },
   };
+
+  function currentUser() { return (CFG.user || 'Azhar').trim() || 'Azhar'; }
+  function userKey(name) { return String(name || 'Azhar').replace(/[^\w-]+/g, '_'); }
+  function normalizeUserRows(rows) {
+    const seen = new Set();
+    return (rows && rows.length ? rows : DEFAULT_USERS).concat(DEFAULT_USERS).filter(u => {
+      const name = String(u.UserName || u.DisplayName || '').trim();
+      if (!name || seen.has(name)) return false;
+      seen.add(name);
+      u.UserName = name;
+      u.DisplayName = String(u.DisplayName || name).trim();
+      u.Active = u.Active || 'Yes';
+      return String(u.Active).toLowerCase() !== 'no';
+    });
+  }
+  function displayNameFor(name) {
+    const u = state.users.find(x => x.UserName === name);
+    return (u && u.DisplayName) || name || 'Azhar';
+  }
+  function workoutOwner(w) {
+    return String(w.UserName || w.Profile || w.Owner || w.OwnerUserName || '').trim();
+  }
+  function profileWorkouts() {
+    const me = currentUser();
+    return state.workouts.filter(w => {
+      const owner = workoutOwner(w);
+      const shared = ['club', 'shared', 'all'].includes(owner.toLowerCase());
+      return shared || owner === me || (!owner && me === 'Azhar');
+    });
+  }
+  function updateProfileBadge() {
+    const el = $('#profileName');
+    if (el) el.textContent = displayNameFor(currentUser());
+  }
+  function timeAgo(ts) {
+    if (!ts) return 'not yet';
+    const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return s + ' sec ago';
+    const m = Math.round(s / 60);
+    if (m < 60) return m + ' min ago';
+    return Math.round(m / 60) + ' hr ago';
+  }
 
   function sheetCsvUrl(tab) {
     return 'https://docs.google.com/spreadsheets/d/' + CFG.sheetId +
@@ -129,23 +201,46 @@
     return [];
   }
 
+  async function loadLocalCsv(file) {
+    try {
+      const r = await fetch(file);
+      if (r.ok) return parseCSV(await r.text());
+    } catch (e) {}
+    return [];
+  }
+
   async function loadCore() {
-    const [ex, w, d] = await Promise.all([
-      fetchTable('Exercises', 'data/exercises.csv'),
+    /* Exercises ship with the app (950 rows — too heavy to pull from the
+       sheet each open); workouts and logs stay live from the sheet. */
+    const [ex, w, d, users] = await Promise.all([
+      loadLocalCsv('data/exercises.csv'),
       fetchTable('Workouts', 'data/workouts.csv'),
       fetchTable('Workout_Days', 'data/workout_days.csv'),
+      fetchTable('Users'),
     ]);
-    state.exercises = ex; state.workouts = w.filter(x => (x.Active || 'Yes') !== 'No'); state.days = d;
+    state.exercises = ex.length ? ex : await fetchTable('Exercises');
+    state.workouts = w.filter(x => (x.Active || 'Yes') !== 'No'); state.days = d;
+    state.users = normalizeUserRows(users);
+    state.sync.lastCoreAt = Date.now();
   }
 
   async function loadRemoteLogs() {
-    if (!CFG.sheetId) { state.remote.loaded = true; return; }
+    if (!CFG.sheetId) { state.remote.loaded = true; return false; }
     try {
       const [runs, sets, journal] = await Promise.all([
         fetchTable('Run_Log'), fetchTable('Exercise_Log'), fetchTable('Journal'),
       ]);
       state.remote = { runs, sets, journal, loaded: true };
-    } catch (e) { state.remote.loaded = true; }
+      state.sync.lastReadAt = Date.now();
+      state.sync.lastError = '';
+      updateSyncBadge();
+      return true;
+    } catch (e) {
+      state.remote.loaded = true;
+      state.sync.lastError = 'Read failed';
+      updateSyncBadge();
+      return false;
+    }
   }
 
   function exById(id) { return state.exercises.find(e => e.ExerciseID === id); }
@@ -163,10 +258,24 @@
   /* ---------------- write-back + queue ---------------- */
 
   function queue() { return lsGet('ef_queue', []); }
-  function setQueue(q) { lsSet('ef_queue', q); updateSyncBadge(); }
+  function itemId(item) {
+    const p = (item && item.payload) || {};
+    return item.action + ':' + (p.LogID || p.EntryID || p.id || JSON.stringify(p));
+  }
+  function dedupeQueue(q) {
+    const seen = new Set();
+    return (q || []).filter(item => {
+      const id = itemId(item);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+  function setQueue(q) { lsSet('ef_queue', dedupeQueue(q)); updateSyncBadge(); }
+  function enqueue(action, payload) { setQueue(queue().concat([{ action, payload }])); }
 
   async function post(action, payload) {
-    if (!CFG.scriptUrl) { setQueue(queue().concat([{ action, payload }])); return false; }
+    if (!CFG.scriptUrl) { enqueue(action, payload); return false; }
     try {
       const r = await fetch(CFG.scriptUrl, {
         method: 'POST',
@@ -175,41 +284,101 @@
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j.ok === false) throw new Error(j.error || 'write failed');
+      state.sync.lastWriteAt = Date.now();
+      state.sync.lastError = '';
+      updateSyncBadge();
+      setTimeout(() => refreshRemoteLogs(false), 1500);
       return true;
     } catch (e) {
-      setQueue(queue().concat([{ action, payload }]));
+      enqueue(action, payload);
+      state.sync.lastError = 'Write queued';
+      updateSyncBadge();
       return false;
     }
   }
 
   async function syncQueue(showToast) {
+    if (state.sync.writing) return false;
     const q = queue();
-    if (!q.length) { if (showToast) toast('Everything is synced.', 'check-circle-2'); return; }
-    if (!CFG.scriptUrl) { if (showToast) toast('Add your Apps Script URL in settings first.', 'plug-zap', true); return; }
+    if (!q.length) { if (showToast) toast('Everything is synced.', 'check-circle-2'); updateSyncBadge(); return true; }
+    if (!CFG.scriptUrl) { if (showToast) toast('Add your Apps Script URL in settings first.', 'plug-zap', true); return false; }
+    state.sync.writing = true;
+    updateSyncBadge();
     let remaining = [];
-    for (const item of q) {
-      try {
-        const r = await fetch(CFG.scriptUrl, {
-          method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(item),
-        });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || j.ok === false) throw new Error('fail');
-      } catch (e) { remaining.push(item); }
+    try {
+      for (const item of q) {
+        try {
+          const r = await fetch(CFG.scriptUrl, {
+            method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(item),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.ok === false) throw new Error('fail');
+        } catch (e) { remaining.push(item); }
+      }
+    } finally {
+      state.sync.writing = false;
     }
     setQueue(remaining);
+    if (remaining.length) state.sync.lastError = 'Write retry pending';
+    else { state.sync.lastWriteAt = Date.now(); state.sync.lastError = ''; setTimeout(() => refreshRemoteLogs(false), 1200); }
     if (showToast) {
-      if (remaining.length) toast(remaining.length + ' logs still unsynced — will retry.', 'cloud-off', true);
+      if (remaining.length) toast(remaining.length + ' logs still unsynced - will retry.', 'cloud-off', true);
       else toast('All logs synced to the club sheet.', 'check-circle-2');
     }
+    return remaining.length === 0;
+  }
+
+  async function refreshRemoteLogs(showToast) {
+    if (state.sync.reading) return false;
+    state.sync.reading = true;
+    updateSyncBadge();
+    const ok = await loadRemoteLogs();
+    state.sync.reading = false;
+    updateSyncBadge();
+    if (ok && ['run', 'progress', 'journal'].includes(state.tab)) render();
+    if (showToast) toast(ok ? 'Club data refreshed.' : 'Could not refresh club data.', ok ? 'refresh-cw' : 'cloud-off', !ok);
+    return ok;
+  }
+
+  async function refreshCoreData(showToast) {
+    await loadCore();
+    if (!profileWorkouts().some(w => w.WorkoutID === state.workoutId)) state.workoutId = null;
+    render();
+    if (showToast) toast('Plans and profiles refreshed.', 'refresh-cw');
+  }
+
+  async function fullSync(showToast) {
+    const wrote = await syncQueue(showToast);
+    if (wrote) await refreshRemoteLogs(false);
+    if (Date.now() - state.sync.lastCoreAt > FOCUS_REFRESH_MS) await refreshCoreData(false);
+  }
+
+  function beaconQueue() {
+    if (!CFG.scriptUrl || !navigator.sendBeacon) return;
+    queue().forEach(item => {
+      try {
+        navigator.sendBeacon(CFG.scriptUrl, new Blob([JSON.stringify(item)], { type: 'text/plain;charset=utf-8' }));
+      } catch (e) {}
+    });
   }
 
   function updateSyncBadge() {
     const n = queue().length;
     const b = $('#syncBadge');
-    if (b) { b.hidden = n === 0; b.textContent = n; }
+    if (b) { b.hidden = n === 0 && !state.sync.reading && !state.sync.writing; b.textContent = n || '•'; }
     const btn = $('#syncBtn');
-    if (btn) btn.classList.toggle('synced', n === 0 && !!CFG.scriptUrl);
+    if (btn) {
+      btn.classList.toggle('synced', n === 0 && !!CFG.scriptUrl && !state.sync.lastError);
+      btn.classList.toggle('busy', state.sync.reading || state.sync.writing);
+      btn.title = n ? n + ' queued' : 'Last read ' + timeAgo(state.sync.lastReadAt);
+    }
+    try {
+      if (navigator.setAppBadge && navigator.clearAppBadge) {
+        if (n) navigator.setAppBadge(n);
+        else navigator.clearAppBadge();
+      }
+    } catch (e) {}
   }
 
   /* ---------------- toasts ---------------- */
@@ -267,15 +436,16 @@
 
   /* ---------------- session (Today) ---------------- */
 
-  function sessionKey(wid) { return 'ef_session_' + todayStr() + '_' + wid; }
+  function sessionKey(wid) { return 'ef_session_' + userKey(currentUser()) + '_' + todayStr() + '_' + wid; }
   function getSession(wid) { return lsGet(sessionKey(wid), { sets: {}, details: {} }); }
   function setSession(wid, sess) { lsSet(sessionKey(wid), sess); }
 
   function suggestedWorkoutId() {
+    const mine = profileWorkouts();
     const dow = new Date().getDay(); // 0 Sun
     const map = { 1: 'HOME_A', 2: 'MIN_DAY', 3: 'HOME_B', 4: 'BACK_RESET', 5: 'HOME_A', 6: 'HOME_B', 0: 'MIN_DAY' };
     const id = map[dow];
-    return state.workouts.some(w => w.WorkoutID === id) ? id : (state.workouts[0] || {}).WorkoutID;
+    return mine.some(w => w.WorkoutID === id) ? id : (mine[0] || {}).WorkoutID;
   }
 
   function repsDefault(target) {
@@ -286,7 +456,7 @@
 
   /* progression: completed >= target sets on 2+ separate days with pain <= 4 */
   function progressionReady(exId, targetSets) {
-    const sets = lsGet('ef_setlogs', []).filter(s => s.ExerciseID === exId && s.Completed);
+    const sets = allSets().filter(s => s.UserName === currentUser() && s.ExerciseID === exId && s.Completed);
     const byDate = {};
     sets.forEach(s => {
       byDate[s.Date] = byDate[s.Date] || { n: 0, pain: 0 };
@@ -305,16 +475,25 @@
   }
 
   function renderToday() {
+    const mine = profileWorkouts();
+    if (state.workoutId && !mine.some(w => w.WorkoutID === state.workoutId)) state.workoutId = null;
     const wid = state.workoutId || suggestedWorkoutId();
     state.workoutId = wid;
-    const workout = state.workouts.find(w => w.WorkoutID === wid);
+    const workout = mine.find(w => w.WorkoutID === wid);
     const sugg = suggestedWorkoutId();
     const sess = getSession(wid);
 
-    const chips = state.workouts.map(w =>
+    const chips = mine.map(w =>
       '<button class="chip' + (w.WorkoutID === wid ? ' active' : '') + '" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
       esc(w.WorkoutName) + (w.WorkoutID === sugg ? '<span class="sug">today</span>' : '') + '</button>'
     ).join('');
+
+    if (!mine.length) {
+      return '<div class="eyebrow">' + esc(displayNameFor(currentUser())) + '</div>' +
+        '<h1 class="pagetitle">No workout plan yet</h1>' +
+        '<p class="pagesub">This profile is ready for its own rows in Workouts and Workout_Days.</p>' +
+        '<div class="empty"><i data-lucide="clipboard-list"></i><div>Add a plan in the club sheet, then sync.</div></div>';
+    }
 
     let cards = '';
     if (workout) {
@@ -381,7 +560,7 @@
     const pct = planned ? Math.round((doneSets / planned) * 100) : 0;
 
     return (
-      '<div class="eyebrow">' + esc(niceDate()) + '</div>' +
+      '<div class="eyebrow">' + esc(niceDate()) + ' for ' + esc(displayNameFor(currentUser())) + '</div>' +
       '<div class="titlerow"><h1 class="pagetitle">' + esc(workout ? workout.WorkoutName : 'No workout') + '</h1>' +
         (doneSets ? '<span class="excard-target">' + doneSets + ' / ' + planned + ' sets</span>' : '') + '</div>' +
       (doneSets ? '<div class="hairbar"><span style="width:' + pct + '%"></span></div>' : '') +
@@ -423,7 +602,7 @@
       chipRow(diffs, 'diff', L.diff) +
       '<div class="resultcount">' + list.length + ' result' + (list.length === 1 ? '' : 's') +
         (CFG.backSafe ? ' · back-safe mode on' : '') + '</div>' +
-      list.map(e =>
+      list.slice(0, state.lib.limit || 120).map(e =>
         '<button class="libitem" data-action="open-exercise" data-id="' + esc(e.ExerciseID) + '">' +
           '<span class="flag ' + flagClass(e.BackFlag) + '"></span>' +
           '<span class="libitem-body">' +
@@ -432,6 +611,8 @@
           '</span><i data-lucide="chevron-right"></i>' +
         '</button>'
       ).join('') +
+      (list.length > (state.lib.limit || 120) ?
+        '<button class="bigbtn ghost mt16" data-action="lib-more">Show ' + Math.min(200, list.length - (state.lib.limit || 120)) + ' more</button>' : '') +
       (list.length ? '' : '<div class="empty"><i data-lucide="search-x"></i><div>Nothing matches — loosen the filters.</div></div>')
     );
   }
@@ -443,9 +624,11 @@
   }
 
   function renderRun() {
-    const runs = allRuns().sort((a, b) => String(b.Date).localeCompare(String(a.Date))).slice(0, 12);
+    const runs = allRuns().filter(r => r.UserName === currentUser())
+      .sort((a, b) => String(b.Date).localeCompare(String(a.Date))).slice(0, 12);
     const ws = weekStart();
     const byUser = {};
+    state.users.forEach(u => { byUser[u.UserName] = { km: 0, best: Infinity, runs: 0 }; });
     allRuns().forEach(r => {
       const u = r.UserName || '?';
       byUser[u] = byUser[u] || { km: 0, best: Infinity, runs: 0 };
@@ -458,7 +641,7 @@
     return (
       '<div class="eyebrow">Out the door</div>' +
       '<h1 class="pagetitle">Run &amp; walk</h1>' +
-      '<p class="pagesub">Distance in, pace out. Saved to the club sheet.</p>' +
+      '<p class="pagesub">Distance in, pace out. Saved for ' + esc(displayNameFor(currentUser())) + '.</p>' +
       '<div class="card card-gold"><div class="formgrid">' +
         '<label><span class="formlabel">Distance km</span><input id="runDist" type="number" inputmode="decimal" step="0.01" placeholder="1.43"></label>' +
         '<label><span class="formlabel">Minutes</span><input id="runMin" type="number" inputmode="decimal" step="0.5" placeholder="23"></label>' +
@@ -480,15 +663,15 @@
       (board.length ? '<div class="section-label">This week, between friends</div>' +
         '<table class="datatable"><tr><th>Who</th><th class="num">km</th><th class="num">outings</th><th class="num">best pace</th></tr>' +
         board.map(([u, s]) =>
-          '<tr><td>' + esc(u) + '</td><td class="num">' + s.km.toFixed(2) + '</td><td class="num">' + s.runs + '</td>' +
+          '<tr' + (u === currentUser() ? ' class="me"' : '') + '><td>' + esc(displayNameFor(u)) + '</td><td class="num">' + s.km.toFixed(2) + '</td><td class="num">' + s.runs + '</td>' +
           '<td class="num">' + (s.best < Infinity ? paceStr(s.best) : '—') + '</td></tr>').join('') +
         '</table>' : '') +
 
-      '<div class="section-label">Recent outings</div>' +
+      '<div class="section-label">Recent outings for ' + esc(displayNameFor(currentUser())) + '</div>' +
       (runs.length ?
-        '<table class="datatable"><tr><th>Date</th><th>Who</th><th class="num">km</th><th class="num">pace</th></tr>' +
+        '<table class="datatable"><tr><th>Date</th><th class="num">km</th><th class="num">pace</th></tr>' +
         runs.map(r =>
-          '<tr><td>' + esc(shortDate(r.Date)) + '</td><td>' + esc(r.UserName) + '</td>' +
+          '<tr><td>' + esc(shortDate(r.Date)) + '</td>' +
           '<td class="num">' + Number(r.Distance_km || 0).toFixed(2) + '</td>' +
           '<td class="num">' + paceStr(Number(r.Pace_min_per_km || 0)) + '</td></tr>').join('') + '</table>'
         : '<div class="empty"><i data-lucide="footprints"></i><div>No outings yet. The first one counts double (emotionally).</div></div>')
@@ -535,7 +718,7 @@
     const ws = weekStart();
     const sets = allSets();
     const runs = allRuns();
-    const me = CFG.user;
+    const me = currentUser();
 
     const mySets = sets.filter(s => s.UserName === me);
     const myRuns = runs.filter(r => r.UserName === me);
@@ -564,6 +747,7 @@
 
     /* friends this week */
     const users = {};
+    state.users.forEach(u => { users[u.UserName] = { sets: 0, km: 0 }; });
     sets.forEach(s => { if (String(s.Date) >= ws) { users[s.UserName] = users[s.UserName] || { sets: 0, km: 0 }; users[s.UserName].sets++; } });
     runs.forEach(r => { if (String(r.Date) >= ws) { users[r.UserName] = users[r.UserName] || { sets: 0, km: 0 }; users[r.UserName].km += Number(r.Distance_km || 0); } });
     const friends = Object.entries(users).sort((a, b) => (b[1].sets + b[1].km) - (a[1].sets + a[1].km));
@@ -571,7 +755,7 @@
     return (
       '<div class="eyebrow">Quiet momentum</div>' +
       '<h1 class="pagetitle">Progress</h1>' +
-      '<p class="pagesub">Consistency beats intensity. Here is yours.</p>' +
+      '<p class="pagesub">Consistency beats intensity. Here is ' + esc(displayNameFor(me)) + '\'s.</p>' +
       '<div class="statgrid">' +
         '<div class="stat"><div class="stat-num">' + workoutsWeek + '</div><div class="stat-label">workouts this week</div></div>' +
         '<div class="stat"><div class="stat-num">' + setsWeek + '</div><div class="stat-label">sets this week</div></div>' +
@@ -590,7 +774,7 @@
       '</div>' +
       (friends.length ? '<div class="section-label">The club, this week</div>' +
         '<table class="datatable"><tr><th>Who</th><th class="num">sets</th><th class="num">km</th></tr>' +
-        friends.map(([u, s]) => '<tr><td>' + esc(u) + '</td><td class="num">' + s.sets + '</td><td class="num">' + s.km.toFixed(1) + '</td></tr>').join('') +
+        friends.map(([u, s]) => '<tr' + (u === me ? ' class="me"' : '') + '><td>' + esc(displayNameFor(u)) + '</td><td class="num">' + s.sets + '</td><td class="num">' + s.km.toFixed(1) + '</td></tr>').join('') +
         '</table>' : '') +
       (state.source === 'local' && !CFG.sheetId ?
         '<div class="card mt24"><div class="badge"><i data-lucide="plug"></i>Local mode</div>' +
@@ -599,10 +783,10 @@
   }
 
   function renderJournal() {
-    const entries = allJournal().filter(j => j.UserName === CFG.user)
+    const entries = allJournal().filter(j => j.UserName === currentUser())
       .sort((a, b) => String(b.Date).localeCompare(String(a.Date))).slice(0, 10);
     return (
-      '<div class="eyebrow">' + esc(niceDate()) + '</div>' +
+      '<div class="eyebrow">' + esc(niceDate()) + ' for ' + esc(displayNameFor(currentUser())) + '</div>' +
       '<h1 class="pagetitle">Journal</h1>' +
       '<p class="pagesub">Thirty honest seconds a day.</p>' +
       '<div class="card card-gold"><div class="formgrid">' +
@@ -635,13 +819,17 @@
     const e = exById(id);
     if (!e) return;
     const vid = videoIdOf(e);
+    const imgs = imagesOf(e);
     openModal(
       '<div style="display:flex;gap:10px;align-items:baseline">' +
         '<span class="flag ' + flagClass(e.BackFlag) + '"></span>' +
         '<div class="sheet-title">' + esc(e.ExerciseName) + '</div></div>' +
       '<div class="sheet-sub">' + esc([e.Category, e.MovementPattern, e.Difficulty].filter(Boolean).join(' · ')) + '</div>' +
-      (vid ? '<div class="videowrap" style="padding:0 0 14px"><iframe src="https://www.youtube.com/embed/' + esc(vid) + '" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>'
+      (vid ? '<div class="videowrap" style="padding:0 0 14px"><iframe src="' + esc(embedUrl(vid)) + '" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>'
            : (e.YouTubeSearchURL ? '<a class="bigbtn ghost" style="margin-bottom:14px;text-decoration:none" href="' + esc(e.YouTubeSearchURL) + '" target="_blank" rel="noopener"><i data-lucide="youtube"></i>Search form videos</a>' : '')) +
+      (imgs.length ? '<div class="imgstrip">' + imgs.slice(0, 2).map(u =>
+        '<img src="' + esc(u) + '" alt="' + esc(e.ExerciseName) + ' demonstration" loading="lazy">').join('') + '</div>' : '') +
+      (e.Instructions ? '<div class="kv"><span class="k">How to</span><span class="v">' + esc(e.Instructions) + '</span></div>' : '') +
       '<div class="kv"><span class="k">Muscles</span><span class="v">' + esc([e.PrimaryMuscles, e.SecondaryMuscles].filter(Boolean).join(' · ')) + '</span></div>' +
       '<div class="kv"><span class="k">Equipment</span><span class="v">' + esc(e.Equipment || '—') + '</span></div>' +
       '<div class="kv"><span class="k">Default</span><span class="v">' + esc((e.DefaultSets || '?') + ' × ' + (e.DefaultRepsOrTime || '?') + ' · rest ' + (e.RestSeconds || '60') + 's' + (e.Tempo ? ' · tempo ' + e.Tempo : '')) + '</span></div>' +
@@ -673,10 +861,16 @@
 
   function openSettings() {
     const q = queue().length;
+    const profileOptions = state.users.map(u =>
+      '<option value="' + esc(u.UserName) + '"' + (u.UserName === currentUser() ? ' selected' : '') + '>' + esc(u.DisplayName || u.UserName) + '</option>'
+    ).join('');
     openModal(
       '<div class="sheet-title">Settings</div>' +
       '<div class="sheet-sub">Data source: ' + (state.source === 'sheet' ? 'club Google Sheet' : 'bundled library (local mode)') + '</div>' +
-      '<label><span class="formlabel">Your display name</span><input id="setUser" value="' + esc(CFG.user) + '"></label>' +
+      '<div class="kv" style="margin-bottom:12px"><span class="k">Sync</span><span class="v">Read ' + esc(timeAgo(state.sync.lastReadAt)) +
+        ' · write ' + esc(timeAgo(state.sync.lastWriteAt)) + (q ? ' · ' + q + ' queued' : '') +
+        (state.sync.lastError ? ' · ' + esc(state.sync.lastError) : '') + '</span></div>' +
+      '<label><span class="formlabel">Profile</span><select id="setUser">' + profileOptions + '</select></label>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Google Sheet ID</span><input id="setSheet" placeholder="1AbC…" value="' + esc(CFG.sheetId) + '"></label>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Apps Script web app URL</span><input id="setScript" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(CFG.scriptUrl) + '"></label>' +
       '<div class="kv mt16" style="border-bottom:none;align-items:center;margin-top:10px"><span class="k">Back-safe</span>' +
@@ -699,7 +893,7 @@
     const st = (sess.sets[exId] || [])[i] || { count: 0 };
     const pain = Number(det.pain || 0);
     const rec = {
-      LogID: uid('SET'), UserName: CFG.user, Date: todayStr(),
+      LogID: uid('SET'), UserName: currentUser(), Date: todayStr(),
       ExerciseID: exId, ExerciseName: ex.ExerciseName || exId,
       SetNumber: i + 1, TargetRepsOrTime: wdRow ? wdRow.TargetRepsOrTime : '',
       ActualReps: st.count, Weight_lb: det.weight || '', RPE_1_10: det.rpe || '',
@@ -723,7 +917,7 @@
     $('#calcPace').textContent = paceStr(pace);
     $('#calcSpeed').textContent = speed.toFixed(2);
     const rec = {
-      LogID: uid('RUN'), UserName: CFG.user, Date: todayStr(),
+      LogID: uid('RUN'), UserName: currentUser(), Date: todayStr(),
       Distance_km: Number(dist.toFixed(2)), Duration_min: mins,
       Pace_min_per_km: Number(pace.toFixed(2)), Speed_km_per_h: Number(speed.toFixed(2)),
       'Route/Location': $('#runRoute').value || '', RPE_1_10: $('#runRpe').value || '',
@@ -737,7 +931,7 @@
 
   function saveJournal() {
     const rec = {
-      EntryID: uid('JRN'), UserName: CFG.user, Date: todayStr(),
+      EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
       Mood: $('#jMood').value === '—' ? '' : $('#jMood').value,
       Energy_1_10: $('#jEnergy').value || '', SleepHours: $('#jSleep').value || '',
       BackPain_0_10: $('#jPain').value || '', BodyWeight_lb: $('#jWeight').value || '',
@@ -782,6 +976,7 @@
     const views = { today: renderToday, library: renderLibrary, run: renderRun, progress: renderProgress, journal: renderJournal };
     $('#view').innerHTML = (views[state.tab] || renderToday)();
     lucide.createIcons({ nodes: [$('#view')] });
+    updateProfileBadge();
     updateSyncBadge();
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
   }
@@ -792,6 +987,7 @@
 
     if (btn.classList.contains('tab')) {
       state.tab = btn.dataset.tab;
+      if (location.hash !== '#' + state.tab) history.replaceState(null, '', '#' + state.tab);
       window.scrollTo(0, 0);
       render();
       return;
@@ -852,7 +1048,7 @@
         return;
       }
       if (wrap.hidden) {
-        wrap.innerHTML = '<iframe src="https://www.youtube.com/embed/' + esc(vid) + '" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>';
+        wrap.innerHTML = '<iframe src="' + esc(embedUrl(vid)) + '" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>';
         wrap.hidden = false;
       } else { wrap.hidden = true; wrap.innerHTML = ''; }
     }
@@ -866,7 +1062,7 @@
       const pain = Number((($('#painScale .sel') || {}).dataset || {}).pain || 0);
       const notes = $('#finishNotes').value || '';
       const rec = {
-        EntryID: uid('JRN'), UserName: CFG.user, Date: todayStr(),
+        EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
         Mood: '', Energy_1_10: '', SleepHours: '', BackPain_0_10: pain, BodyWeight_lb: '',
         CaloriesEstimate: '', ProteinEstimate_g: '',
         Journal: 'Workout ' + (state.workoutId || '') + ' finished. Effort: ' + effort + (notes ? '. ' + notes : ''),
@@ -882,7 +1078,8 @@
     }
 
     else if (a === 'open-exercise') { openExercise(btn.dataset.id); }
-    else if (a === 'lib-filter') { state.lib[btn.dataset.key] = btn.dataset.v; render(); }
+    else if (a === 'lib-filter') { state.lib[btn.dataset.key] = btn.dataset.v; state.lib.limit = 120; render(); }
+    else if (a === 'lib-more') { state.lib.limit = (state.lib.limit || 120) + 200; render(); }
     else if (a === 'save-run') { saveRun(); }
     else if (a === 'save-journal') { saveJournal(); }
     else if (a === 'close-modal') { closeModal(); }
@@ -894,6 +1091,7 @@
     }
     else if (a === 'save-settings') {
       saveSettings({ user: $('#setUser').value.trim() || 'Azhar', sheetId: $('#setSheet').value.trim(), scriptUrl: $('#setScript').value.trim() });
+      state.workoutId = null;
       closeModal(); toast('Settings saved — reloading data.', 'save');
       boot();
     }
@@ -946,28 +1144,55 @@
   });
 
   $('#settingsBtn').addEventListener('click', openSettings);
-  $('#syncBtn').addEventListener('click', () => syncQueue(true));
+  $('#profileBtn').addEventListener('click', openSettings);
+  $('#syncBtn').addEventListener('click', () => fullSync(true));
   $('#restSkip').addEventListener('click', stopRest);
   $('#restAdd').addEventListener('click', () => { state.restEnd += 15000; tickRest(); });
 
-  window.addEventListener('online', () => syncQueue(false));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncQueue(false); });
+  window.addEventListener('online', () => fullSync(false));
+  window.addEventListener('pagehide', beaconQueue);
+  window.addEventListener('hashchange', () => {
+    const next = initialTab();
+    if (next !== state.tab) { state.tab = next; render(); }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      beaconQueue();
+    } else {
+      syncQueue(false);
+      if (Date.now() - state.sync.lastReadAt > FOCUS_REFRESH_MS) refreshRemoteLogs(false);
+      if (Date.now() - state.sync.lastCoreAt > CORE_REFRESH_MS) refreshCoreData(false);
+    }
+  });
+
+  function startSyncTimers() {
+    if (syncTimersStarted) return;
+    syncTimersStarted = true;
+    setInterval(() => syncQueue(false), WRITE_RETRY_MS);
+    setInterval(() => refreshRemoteLogs(false), READ_REFRESH_MS);
+    setInterval(() => refreshCoreData(false), CORE_REFRESH_MS);
+  }
 
   /* ---------------- boot ---------------- */
 
   async function boot() {
+    markRuntimeClasses();
     $('#view').innerHTML = '<div class="empty" style="padding-top:80px"><i data-lucide="dumbbell"></i><div>Opening the club…</div></div>';
     lucide.createIcons({ nodes: [$('#view')] });
+    updateProfileBadge();
     await loadCore();
     render();
-    loadRemoteLogs().then(() => { if (state.tab === 'run' || state.tab === 'progress' || state.tab === 'journal') render(); });
+    refreshRemoteLogs(false);
     syncQueue(false);
+    startSyncTimers();
   }
 
   lucide.createIcons();
   boot();
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      setInterval(() => reg.update(), CORE_REFRESH_MS);
+    }).catch(() => {});
   }
 })();
