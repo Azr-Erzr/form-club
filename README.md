@@ -1,5 +1,8 @@
 # Form — exercise club
 
+**Live:** https://azr-erzr.github.io/form-club/ · open it on your phone →
+Share → Add to Home Screen.
+
 A mobile-only, zero-cost fitness PWA. Lives on GitHub Pages, reads its exercise
 database from a Google Sheet, writes logs back through Apps Script, and keeps a
 full offline copy on your phone.

@@ -240,8 +240,10 @@
 
   /* ---------------- rest timer ---------------- */
 
-  function startRest(seconds) {
+  function startRest(seconds, label) {
     state.restEnd = Date.now() + seconds * 1000;
+    state.restLabel = label || 'rest';
+    $('.restbar-label').textContent = state.restLabel;
     $('#restbar').hidden = false;
     if (state.restTimer) clearInterval(state.restTimer);
     state.restTimer = setInterval(tickRest, 250);
@@ -254,7 +256,7 @@
     if (left <= 0) {
       stopRest();
       if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
-      toast('Rest is over — next set.', 'timer');
+      toast(state.restLabel === 'walk' ? 'Walk done — log it in the Run tab.' : 'Rest is over — next set.', 'timer');
     }
   }
   function stopRest() {
@@ -369,9 +371,20 @@
       }).join('');
     }
 
+    /* session progress: done sets vs planned sets */
+    let planned = 0, doneSets = 0;
+    state.days.filter(d => d.WorkoutID === wid).forEach(row => {
+      const arr = sess.sets[row.ExerciseID] || [];
+      planned += Math.max(Number(row.TargetSets) || 1, arr.length);
+      doneSets += arr.filter(s => s && s.done).length;
+    });
+    const pct = planned ? Math.round((doneSets / planned) * 100) : 0;
+
     return (
       '<div class="eyebrow">' + esc(niceDate()) + '</div>' +
-      '<h1 class="pagetitle">' + esc(workout ? workout.WorkoutName : 'No workout') + '</h1>' +
+      '<div class="titlerow"><h1 class="pagetitle">' + esc(workout ? workout.WorkoutName : 'No workout') + '</h1>' +
+        (doneSets ? '<span class="excard-target">' + doneSets + ' / ' + planned + ' sets</span>' : '') + '</div>' +
+      (doneSets ? '<div class="hairbar"><span style="width:' + pct + '%"></span></div>' : '') +
       '<p class="pagesub">' + esc(workout ? (workout.Description + ' · about ' + workout.EstimatedMinutes + ' min') : 'Pick a plan below.') + '</p>' +
       '<div class="chiprow">' + chips + '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
@@ -459,6 +472,11 @@
       '</div>' +
       '<button class="bigbtn mt16" data-action="save-run"><i data-lucide="footprints"></i>Save run</button></div>' +
 
+      '<div class="section-label">Walk timer</div>' +
+      '<div class="card"><div class="chiprow" style="margin:0">' +
+        [20, 30, 45, 60].map(m => '<button class="chip" data-action="walk-timer" data-min="' + m + '">' + m + ' min</button>').join('') +
+      '</div><p class="pagesub" style="margin:10px 0 0">Counts down in the bar below and keeps true time even if the screen locks.</p></div>' +
+
       (board.length ? '<div class="section-label">This week, between friends</div>' +
         '<table class="datatable"><tr><th>Who</th><th class="num">km</th><th class="num">outings</th><th class="num">best pace</th></tr>' +
         board.map(([u, s]) =>
@@ -487,6 +505,30 @@
     }).join(' ');
     return '<svg class="sparkline" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
       '<polyline points="' + pts + '" fill="none" stroke="#C6A15B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  const BACK_CIRCUIT_IDS = ['EX0012', 'EX0013', 'EX0022', 'EX0010', 'EX0021'];
+
+  function renderChallenges(mySets, myRuns, ws) {
+    const weekSets = mySets.filter(s => String(s.Date) >= ws);
+    const workouts = new Set(weekSets.map(s => s.Date)).size;
+    const walkMin = myRuns.filter(r => String(r.Date) >= ws).reduce((a, r) => a + Number(r.Duration_min || 0), 0);
+    const gentleDays = new Set(weekSets.filter(s =>
+      BACK_CIRCUIT_IDS.includes(s.ExerciseID) && Number(s.Pain_0_10 || 0) <= 4).map(s => s.Date)).size;
+
+    const items = [
+      { label: 'Three workouts', now: workouts, goal: 3, unit: '' },
+      { label: '100 walking minutes', now: Math.round(walkMin), goal: 100, unit: ' min' },
+      { label: 'Two gentle back circuits', now: gentleDays, goal: 2, unit: '' },
+    ];
+    return '<div class="card">' + items.map(c => {
+      const pct = Math.min(100, Math.round((c.now / c.goal) * 100));
+      const done = c.now >= c.goal;
+      return '<div class="challenge' + (done ? ' done' : '') + '">' +
+        '<div class="challenge-row"><span>' + esc(c.label) + '</span>' +
+        '<span class="challenge-count">' + (done ? '<i data-lucide="check"></i>' : c.now + c.unit + ' / ' + c.goal + c.unit) + '</span></div>' +
+        '<div class="hairbar"><span style="width:' + pct + '%"></span></div></div>';
+    }).join('') + '</div>';
   }
 
   function renderProgress() {
@@ -536,6 +578,8 @@
         '<div class="stat"><div class="stat-num">' + kmWeek.toFixed(1) + '<small> km</small></div><div class="stat-label">distance this week</div></div>' +
         '<div class="stat"><div class="stat-num">' + streak + '<small> day' + (streak === 1 ? '' : 's') + '</small></div><div class="stat-label">streak</div></div>' +
       '</div>' +
+      '<div class="section-label">This week’s challenges</div>' +
+      renderChallenges(mySets, myRuns, ws) +
       '<div class="section-label">Push-up ladder</div>' +
       '<div class="card"><div class="chiprow" style="margin:0">' +
         ladder.map(([id, name]) => '<span class="chip' + (level === name ? ' active' : '') + '">' + name + '</span>').join('') +
@@ -815,6 +859,7 @@
 
     else if (a === 'toggle-details') { const el = $('#det-' + btn.dataset.ex); el.hidden = !el.hidden; }
     else if (a === 'rest') { startRest(Number(btn.dataset.sec) || 60); }
+    else if (a === 'walk-timer') { startRest((Number(btn.dataset.min) || 20) * 60, 'walk'); toast('Walk timer running — enjoy it out there.', 'footprints'); }
     else if (a === 'finish') { openFinish(); }
     else if (a === 'save-finish') {
       const effort = ($('#effortRow .sel') || {}).dataset ? $('#effortRow .sel').dataset.effort : 'Good';
@@ -906,6 +951,7 @@
   $('#restAdd').addEventListener('click', () => { state.restEnd += 15000; tickRest(); });
 
   window.addEventListener('online', () => syncQueue(false));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncQueue(false); });
 
   /* ---------------- boot ---------------- */
 

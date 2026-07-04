@@ -11,6 +11,7 @@
  *   4. Share the Sheet: Anyone with the link → Viewer (lets the app read it).
  */
 
+var SHEET_ID = '1-yrjMnyAGWDDZNa4K9NlEACqOn4iTorBwKNSMGEb4-c';
 var REPO_RAW = 'https://raw.githubusercontent.com/Azr-Erzr/form-club/main/data/';
 
 var LOG_SHEETS = {
@@ -34,7 +35,7 @@ var HEADERS = {
 };
 
 function setupSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SpreadsheetApp.openById(SHEET_ID);
 
   // Log + profile tabs with fixed headers
   Object.keys(HEADERS).forEach(function (name) {
@@ -87,7 +88,7 @@ function doPost(e) {
     var lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ss = SpreadsheetApp.openById(SHEET_ID);
       var sh = ss.getSheetByName(sheetName);
       if (!sh) return json({ ok: false, error: 'Missing tab: ' + sheetName + '. Run setupSheet().' });
       var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];

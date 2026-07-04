@@ -103,6 +103,27 @@ select { background-image: none; }
   line-height: 1.15; margin-bottom: 4px;
 }
 .pagesub { color: var(--taupe); font-size: 0.88rem; margin-bottom: 20px; }
+.titlerow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+
+.hairbar {
+  height: 2px; background: var(--hairline-soft); border-radius: 1px;
+  margin: 10px 0 12px; overflow: hidden;
+}
+.hairbar span {
+  display: block; height: 100%; background: var(--champagne);
+  border-radius: 1px; transition: width 0.4s ease;
+}
+
+.challenge { padding: 10px 0 4px; }
+.challenge + .challenge { border-top: 1px solid var(--hairline-soft); margin-top: 6px; }
+.challenge-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.9rem; }
+.challenge-count { color: var(--taupe); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.challenge.done .challenge-count { color: var(--sage); }
+.challenge.done .challenge-count svg { width: 15px; height: 15px; }
+.challenge.done .hairbar span { background: var(--sage); }
+
+.view > * { animation: fadeup 0.3s ease both; }
+@keyframes fadeup { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 .section-label {
   font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;

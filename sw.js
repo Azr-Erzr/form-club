@@ -1,5 +1,5 @@
 /* Form — offline shell */
-const VERSION = 'form-v1';
+const VERSION = 'form-v2';
 const SHELL = [
   './', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'data/exercises.csv', 'data/workouts.csv', 'data/workout_days.csv',
