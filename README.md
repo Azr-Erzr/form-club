@@ -49,11 +49,19 @@ current `apps-script/Code.gs`.
 
 ## Sync Cadence
 
-Phones retry queued writes every 30 seconds, refresh club logs every 2 minutes,
-and refresh plans/profiles every 10 minutes or when the app comes back into
-focus. Apps Script de-dupes by `LogID`, `EntryID`, `UserName`, `WorkoutID`, and
-`WorkoutDayID`, so flaky retries should not duplicate logs, profiles, routines,
-or routine exercise rows.
+Phones retry queued writes every 30 seconds, refresh recent club logs every
+2 minutes, and refresh plans/profiles every 10 minutes or when the app comes
+back into focus. Apps Script de-dupes by `LogID`, `EntryID`, `UserName`,
+`WorkoutID`, and `WorkoutDayID`, so flaky retries should not duplicate logs,
+profiles, routines, or routine exercise rows.
+
+## Sheet Scale
+
+The original `Run_Log`, `Exercise_Log`, and `Journal` tabs stay in place as
+legacy/backward-compatible tabs. New log writes go into monthly tabs like
+`Run_Log_2026_07`, `Exercise_Log_2026_07`, and `Journal_2026_07`. The app
+prefers the Apps Script `readLogs` endpoint, which returns a bounded recent
+window instead of forcing phones to download every historical log row.
 
 ## Guardrails
 

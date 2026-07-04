@@ -16,6 +16,7 @@
   const CORE_REFRESH_MS = 10 * 60 * 1000;
   const WRITE_RETRY_MS = 30 * 1000;
   const FOCUS_REFRESH_MS = 45 * 1000;
+  const LOG_READ_DAYS = 180;
 
   function loadSettings() {
     let s = {};
@@ -188,6 +189,27 @@
       '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab);
   }
 
+  function scriptReadUrl(params) {
+    const url = new URL(CFG.scriptUrl);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    url.searchParams.set('_', Date.now());
+    return url.toString();
+  }
+
+  async function fetchScriptJson(params) {
+    if (!CFG.scriptUrl) return null;
+    const r = await fetch(scriptReadUrl(params), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    return j && j.ok ? j : null;
+  }
+
+  async function fetchBoundedLogs() {
+    const j = await fetchScriptJson({ action: 'readLogs', days: LOG_READ_DAYS });
+    if (!j || !Array.isArray(j.runs) || !Array.isArray(j.sets) || !Array.isArray(j.journal)) return null;
+    return { runs: j.runs, sets: j.sets, journal: j.journal, since: j.since };
+  }
+
   async function fetchTable(tab, localFile) {
     if (CFG.sheetId) {
       try {
@@ -231,12 +253,17 @@
   }
 
   async function loadRemoteLogs() {
-    if (!CFG.sheetId) { state.remote.loaded = true; return false; }
+    if (!CFG.sheetId && !CFG.scriptUrl) { state.remote.loaded = true; return false; }
     try {
-      const [runs, sets, journal] = await Promise.all([
-        fetchTable('Run_Log'), fetchTable('Exercise_Log'), fetchTable('Journal'),
-      ]);
-      state.remote = { runs, sets, journal, loaded: true };
+      const bounded = await fetchBoundedLogs();
+      if (bounded) {
+        state.remote = { runs: bounded.runs, sets: bounded.sets, journal: bounded.journal, loaded: true };
+      } else {
+        const [runs, sets, journal] = await Promise.all([
+          fetchTable('Run_Log'), fetchTable('Exercise_Log'), fetchTable('Journal'),
+        ]);
+        state.remote = { runs, sets, journal, loaded: true };
+      }
       state.sync.lastReadAt = Date.now();
       state.sync.lastError = '';
       updateSyncBadge();
@@ -1009,7 +1036,7 @@
       '<div class="kv" style="margin-bottom:12px"><span class="k">Sync</span><span class="v">Read ' + esc(timeAgo(state.sync.lastReadAt)) +
         ' · write ' + esc(timeAgo(state.sync.lastWriteAt)) + (q ? ' · ' + q + ' queued' : '') +
         (state.sync.lastError ? ' · ' + esc(state.sync.lastError) : '') + '</span></div>' +
-      '<div class="kv" style="margin-bottom:12px"><span class="k">Timers</span><span class="v">Writes retry every 30 sec. Logs read every 2 min. Plans and profiles read every 10 min.</span></div>' +
+      '<div class="kv" style="margin-bottom:12px"><span class="k">Timers</span><span class="v">Writes retry every 30 sec. Recent logs read every 2 min. Plans and profiles read every 10 min.</span></div>' +
       '<label><span class="formlabel">Profile</span><select id="setUser">' + profileOptions + '</select></label>' +
       '<button class="bigbtn subtle mt16" data-action="open-add-profile"><i data-lucide="user-plus"></i>Add profile</button>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Google Sheet ID</span><input id="setSheet" placeholder="1AbC…" value="' + esc(CFG.sheetId) + '"></label>' +

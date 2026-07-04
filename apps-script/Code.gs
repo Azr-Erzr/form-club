@@ -23,6 +23,16 @@ var LOG_SHEETS = {
   appendWorkoutDay: 'Workout_Days',
 };
 
+var MONTHLY_LOG_ACTIONS = {
+  appendRunLog: true,
+  appendExerciseLog: true,
+  appendJournal: true,
+};
+var LOG_READ_DAYS_DEFAULT = 180;
+var LOG_READ_DAYS_MAX = 366;
+var MAX_LOG_ROWS_PER_SHEET = 750;
+var MAX_LOG_ROWS_RESPONSE = 1500;
+
 var HEADERS = {
   Exercises: null, // imported from CSV
   Workouts: null,
@@ -55,6 +65,7 @@ function setupSheet() {
   importCsv(ss, 'Exercises', REPO_RAW + 'exercises.csv');
   importCsv(ss, 'Workouts', REPO_RAW + 'workouts.csv');
   importCsv(ss, 'Workout_Days', REPO_RAW + 'workout_days.csv');
+  setupMonthlyLogTabs();
 
   // Starter profile rows
   var users = ss.getSheetByName('Users');
@@ -89,8 +100,14 @@ function importCsv(ss, name, url) {
   sh.setFrozenRows(1);
 }
 
-function doGet() {
-  return json({ ok: true, club: 'FORM', hint: 'POST {action, payload} to log.' });
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action;
+  if (action === 'readLogs') return json(readLogs(e.parameter || {}));
+  if (action === 'setupMonthlyLogTabs') {
+    setupMonthlyLogTabs();
+    return json({ ok: true, created: currentMonthlyLogSheetNames() });
+  }
+  return json({ ok: true, club: 'FORM', hint: 'POST {action, payload} to log, GET ?action=readLogs for bounded recent logs.' });
 }
 
 function doPost(e) {
@@ -103,7 +120,7 @@ function doPost(e) {
     lock.waitLock(10000);
     try {
       var ss = SpreadsheetApp.openById(SHEET_ID);
-      var sh = ss.getSheetByName(sheetName);
+      var sh = sheetForWrite(ss, body.action, body.payload || {});
       if (!sh) return json({ ok: false, error: 'Missing tab: ' + sheetName + '. Run setupSheet().' });
       var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
       var idHeader = body.payload.LogID ? 'LogID'
@@ -113,11 +130,9 @@ function doPost(e) {
         : (body.payload.UserName ? 'UserName' : ''))));
       var idValue = idHeader ? String(body.payload[idHeader]) : '';
       var idCol = idHeader ? headers.indexOf(idHeader) + 1 : 0;
-      if (idValue && idCol > 0 && sh.getLastRow() > 1) {
-        var existing = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
-        for (var i = 0; i < existing.length; i++) {
-          if (String(existing[i][0]) === idValue) return json({ ok: true, deduped: true });
-        }
+      if (idValue && idCol > 0) {
+        var dedupeSheets = MONTHLY_LOG_ACTIONS[body.action] ? candidateMonthlySheets(ss, sheetName, body.payload.Date || new Date()) : [sheetName];
+        if (hasExistingId(ss, dedupeSheets, idHeader, idValue)) return json({ ok: true, deduped: true, sheet: sh.getName() });
       }
       var row = headers.map(function (h) {
         var v = body.payload[h];
@@ -131,6 +146,136 @@ function doPost(e) {
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }
+}
+
+function setupMonthlyLogTabs() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  currentMonthlyLogSheetNames().forEach(function (name) {
+    var base = name.replace(/_\d{4}_\d{2}$/, '');
+    ensureSheetWithHeaders(ss, name, HEADERS[base]);
+  });
+}
+
+function currentMonthlyLogSheetNames() {
+  return ['Run_Log', 'Exercise_Log', 'Journal'].map(function (base) {
+    return monthlySheetName(base, new Date());
+  });
+}
+
+function sheetForWrite(ss, action, payload) {
+  var base = LOG_SHEETS[action];
+  if (MONTHLY_LOG_ACTIONS[action]) {
+    return ensureSheetWithHeaders(ss, monthlySheetName(base, payload.Date || new Date()), HEADERS[base]);
+  }
+  return ensureSheetWithHeaders(ss, base, HEADERS[base]);
+}
+
+function ensureSheetWithHeaders(ss, name, headers) {
+  var sh = ss.getSheetByName(name) || ss.insertSheet(name);
+  if (headers && sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function monthlySheetName(base, value) {
+  var d = value instanceof Date ? value : new Date(String(value).slice(0, 10) + 'T12:00:00Z');
+  if (isNaN(d)) d = new Date();
+  return base + '_' + d.getUTCFullYear() + '_' + String(d.getUTCMonth() + 1).padStart(2, '0');
+}
+
+function candidateMonthlySheets(ss, base, dateValue) {
+  var names = [base, monthlySheetName(base, dateValue)];
+  var seen = {};
+  return names.filter(function (name) {
+    if (seen[name]) return false;
+    seen[name] = true;
+    return !!ss.getSheetByName(name);
+  });
+}
+
+function hasExistingId(ss, sheetNames, idHeader, idValue) {
+  for (var s = 0; s < sheetNames.length; s++) {
+    var sh = ss.getSheetByName(sheetNames[s]);
+    if (!sh || sh.getLastRow() <= 1) continue;
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    var idCol = headers.indexOf(idHeader) + 1;
+    if (idCol < 1) continue;
+    var firstRow = Math.max(2, sh.getLastRow() - MAX_LOG_ROWS_PER_SHEET + 1);
+    var existing = sh.getRange(firstRow, idCol, sh.getLastRow() - firstRow + 1, 1).getValues();
+    for (var i = 0; i < existing.length; i++) {
+      if (String(existing[i][0]) === idValue) return true;
+    }
+  }
+  return false;
+}
+
+function readLogs(params) {
+  var days = Math.min(Math.max(Number(params.days || LOG_READ_DAYS_DEFAULT), 7), LOG_READ_DAYS_MAX);
+  var since = dateStringDaysAgo(days);
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  return {
+    ok: true,
+    bounded: true,
+    since: since,
+    days: days,
+    runs: readRecentRows(ss, 'Run_Log', since),
+    sets: readRecentRows(ss, 'Exercise_Log', since),
+    journal: readRecentRows(ss, 'Journal', since),
+  };
+}
+
+function readRecentRows(ss, base, since) {
+  var names = recentMonthlyNames(base, since);
+  names.unshift(base); // legacy tab, bounded from the bottom.
+  var rows = [];
+  var seen = {};
+  names.forEach(function (name) {
+    if (seen[name]) return;
+    seen[name] = true;
+    var sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() <= 1) return;
+    var lastCol = sh.getLastColumn();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+    var dateIndex = headers.indexOf('Date');
+    var firstRow = Math.max(2, sh.getLastRow() - MAX_LOG_ROWS_PER_SHEET + 1);
+    var values = sh.getRange(firstRow, 1, sh.getLastRow() - firstRow + 1, lastCol).getValues();
+    values.forEach(function (r) {
+      var obj = {};
+      headers.forEach(function (h, i) { obj[h] = r[i] === null ? '' : r[i]; });
+      var rowDate = dateIndex >= 0 ? normalizeDateValue(r[dateIndex]) : '';
+      if (!rowDate || rowDate >= since) rows.push(obj);
+    });
+  });
+  rows.sort(function (a, b) { return String(b.Date || '').localeCompare(String(a.Date || '')); });
+  return rows.slice(0, MAX_LOG_ROWS_RESPONSE);
+}
+
+function recentMonthlyNames(base, since) {
+  var out = [];
+  var start = new Date(since + 'T12:00:00Z');
+  var end = new Date();
+  start.setUTCDate(1);
+  end.setUTCDate(1);
+  while (start <= end) {
+    out.push(monthlySheetName(base, start));
+    start.setUTCMonth(start.getUTCMonth() + 1);
+  }
+  return out;
+}
+
+function dateStringDaysAgo(days) {
+  var d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+
+function normalizeDateValue(value) {
+  if (value instanceof Date) {
+    return value.getUTCFullYear() + '-' + String(value.getUTCMonth() + 1).padStart(2, '0') + '-' + String(value.getUTCDate()).padStart(2, '0');
+  }
+  return String(value || '').slice(0, 10);
 }
 
 function json(obj) {
