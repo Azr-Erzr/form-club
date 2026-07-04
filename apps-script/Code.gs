@@ -18,6 +18,9 @@ var LOG_SHEETS = {
   appendRunLog: 'Run_Log',
   appendExerciseLog: 'Exercise_Log',
   appendJournal: 'Journal',
+  appendUser: 'Users',
+  appendWorkout: 'Workouts',
+  appendWorkoutDay: 'Workout_Days',
 };
 
 var HEADERS = {
@@ -103,7 +106,11 @@ function doPost(e) {
       var sh = ss.getSheetByName(sheetName);
       if (!sh) return json({ ok: false, error: 'Missing tab: ' + sheetName + '. Run setupSheet().' });
       var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-      var idHeader = body.payload.LogID ? 'LogID' : (body.payload.EntryID ? 'EntryID' : '');
+      var idHeader = body.payload.LogID ? 'LogID'
+        : (body.payload.EntryID ? 'EntryID'
+        : (body.payload.WorkoutDayID ? 'WorkoutDayID'
+        : (body.payload.WorkoutID ? 'WorkoutID'
+        : (body.payload.UserName ? 'UserName' : ''))));
       var idValue = idHeader ? String(body.payload[idHeader]) : '';
       var idCol = idHeader ? headers.indexOf(idHeader) + 1 : 0;
       if (idValue && idCol > 0 && sh.getLastRow() > 1) {

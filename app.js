@@ -42,7 +42,7 @@
 
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
-  const TABS = ['today', 'library', 'run', 'progress', 'journal'];
+  const TABS = ['today', 'library', 'run', 'progress'];
 
   function initialTab() {
     const h = String(location.hash || '').replace('#', '').toLowerCase();
@@ -76,6 +76,9 @@
   }
   function uid(prefix) {
     return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+  }
+  function compactId(s) {
+    return String(s || '').trim().replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase();
   }
   function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d; }
   function weekStart() {
@@ -130,6 +133,7 @@
     remote: { runs: [], sets: [], journal: [], loaded: false },
     source: 'local',
     lib: { q: '', cat: 'All', place: 'All', diff: 'All' },
+    routine: { q: '' },
     workoutId: null,
     restEnd: 0, restTimer: null,
     sync: { reading: false, writing: false, lastReadAt: 0, lastWriteAt: 0, lastCoreAt: 0, lastError: '' },
@@ -137,6 +141,8 @@
 
   function currentUser() { return (CFG.user || 'Azhar').trim() || 'Azhar'; }
   function userKey(name) { return String(name || 'Azhar').replace(/[^\w-]+/g, '_'); }
+  function todayWorkoutId() { return 'DAY_' + compactId(currentUser() || 'USER') + '_' + todayStr().replace(/-/g, ''); }
+  function isTodayWorkout(id) { return id === todayWorkoutId(); }
   function normalizeUserRows(rows) {
     const seen = new Set();
     return (rows && rows.length ? rows : DEFAULT_USERS).concat(DEFAULT_USERS).filter(u => {
@@ -260,7 +266,7 @@
   function queue() { return lsGet('ef_queue', []); }
   function itemId(item) {
     const p = (item && item.payload) || {};
-    return item.action + ':' + (p.LogID || p.EntryID || p.id || JSON.stringify(p));
+    return item.action + ':' + (p.LogID || p.EntryID || p.WorkoutDayID || p.WorkoutID || p.UserName || p.id || JSON.stringify(p));
   }
   function dedupeQueue(q) {
     const seen = new Set();
@@ -336,7 +342,7 @@
     const ok = await loadRemoteLogs();
     state.sync.reading = false;
     updateSyncBadge();
-    if (ok && ['run', 'progress', 'journal'].includes(state.tab)) render();
+    if (ok && ['today', 'run', 'progress'].includes(state.tab)) render();
     if (showToast) toast(ok ? 'Club data refreshed.' : 'Could not refresh club data.', ok ? 'refresh-cw' : 'cloud-off', !ok);
     return ok;
   }
@@ -467,6 +473,78 @@
     return good.length >= 2;
   }
 
+  function rowsForWorkout(wid) {
+    return state.days.filter(d => d.WorkoutID === wid).sort((a, b) => Number(a.Order) - Number(b.Order));
+  }
+
+  function appendAndPost(action, localList, row) {
+    localList.push(row);
+    post(action, row).then(() => updateSyncBadge());
+  }
+
+  function ensureTodayRoutine(seedWid) {
+    const dayId = todayWorkoutId();
+    let workout = state.workouts.find(w => w.WorkoutID === dayId);
+    const seed = seedWid && seedWid !== dayId ? state.workouts.find(w => w.WorkoutID === seedWid) : null;
+    if (!workout) {
+      workout = {
+        WorkoutID: dayId,
+        WorkoutName: 'Today - ' + shortDate(todayStr()),
+        Goal: (seed && seed.Goal) || 'Custom',
+        Level: (seed && seed.Level) || 'Any',
+        Location: (seed && seed.Location) || 'Gym/Home',
+        EstimatedMinutes: (seed && seed.EstimatedMinutes) || '45',
+        Description: 'Editable routine for ' + displayNameFor(currentUser()),
+        BackWarning: (seed && seed.BackWarning) || 'Use the pain rule: stop any movement that feels wrong.',
+        Active: 'Yes',
+        UserName: currentUser(),
+      };
+      appendAndPost('appendWorkout', state.workouts, workout);
+    }
+    if (seed && !rowsForWorkout(dayId).length) {
+      rowsForWorkout(seedWid).forEach((row, i) => {
+        const clone = Object.assign({}, row, {
+          WorkoutDayID: uid('WD'),
+          WorkoutID: dayId,
+          Order: String(i + 1),
+          Notes: row.Notes || 'Copied into today',
+        });
+        appendAndPost('appendWorkoutDay', state.days, clone);
+      });
+    }
+    state.workoutId = dayId;
+    return dayId;
+  }
+
+  function addExerciseToRoutine(exId) {
+    const ex = exById(exId);
+    if (!ex) return false;
+    const wid = ensureTodayRoutine(state.workoutId);
+    if (rowsForWorkout(wid).some(row => row.ExerciseID === exId)) {
+      toast('Already in today\'s routine.', 'check-circle-2');
+      return false;
+    }
+    const order = rowsForWorkout(wid).length + 1;
+    const row = {
+      WorkoutDayID: uid('WD'),
+      WorkoutID: wid,
+      Order: String(order),
+      ExerciseID: exId,
+      TargetSets: ex.DefaultSets || '2',
+      TargetRepsOrTime: ex.DefaultRepsOrTime || '8-12 reps',
+      RestSeconds: ex.RestSeconds || '60',
+      Optional: 'No',
+      Notes: 'Added in app',
+    };
+    appendAndPost('appendWorkoutDay', state.days, row);
+    return true;
+  }
+
+  function latestDayNote() {
+    return allJournal().filter(j => j.UserName === currentUser() && String(j.Date).slice(0, 10) === todayStr() && j.Journal && j.Mood === 'Note')
+      .sort((a, b) => String(b.UpdatedAt || '').localeCompare(String(a.UpdatedAt || '')))[0];
+  }
+
   /* ---------------- views ---------------- */
 
   function flagClass(f) {
@@ -491,13 +569,13 @@
     if (!mine.length) {
       return '<div class="eyebrow">' + esc(displayNameFor(currentUser())) + '</div>' +
         '<h1 class="pagetitle">No workout plan yet</h1>' +
-        '<p class="pagesub">This profile is ready for its own rows in Workouts and Workout_Days.</p>' +
-        '<div class="empty"><i data-lucide="clipboard-list"></i><div>Add a plan in the club sheet, then sync.</div></div>';
+        '<p class="pagesub">Start a routine for this profile, then add exercises from the library.</p>' +
+        '<button class="bigbtn" data-action="create-today-routine"><i data-lucide="plus"></i>Create today\'s routine</button>';
     }
 
     let cards = '';
     if (workout) {
-      const rows = state.days.filter(d => d.WorkoutID === wid).sort((a, b) => Number(a.Order) - Number(b.Order));
+      const rows = rowsForWorkout(wid);
       cards = rows.map(row => {
         const ex = exById(row.ExerciseID) || { ExerciseName: row.ExerciseID, BackFlag: 'Green' };
         const nSets = Number(row.TargetSets) || 1;
@@ -552,7 +630,7 @@
 
     /* session progress: done sets vs planned sets */
     let planned = 0, doneSets = 0;
-    state.days.filter(d => d.WorkoutID === wid).forEach(row => {
+    rowsForWorkout(wid).forEach(row => {
       const arr = sess.sets[row.ExerciseID] || [];
       planned += Math.max(Number(row.TargetSets) || 1, arr.length);
       doneSets += arr.filter(s => s && s.done).length;
@@ -566,8 +644,15 @@
       (doneSets ? '<div class="hairbar"><span style="width:' + pct + '%"></span></div>' : '') +
       '<p class="pagesub">' + esc(workout ? (workout.Description + ' · about ' + workout.EstimatedMinutes + ' min') : 'Pick a plan below.') + '</p>' +
       '<div class="chiprow">' + chips + '</div>' +
+      '<div class="actionrow">' +
+        '<button class="toolbtn actiontool" data-action="customize-today"><i data-lucide="copy-plus"></i>' + (isTodayWorkout(wid) ? 'Today routine' : 'Customize today') + '</button>' +
+        '<button class="toolbtn actiontool" data-action="open-add-exercise"><i data-lucide="search"></i>Add exercise</button>' +
+      '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
       cards +
+      '<div class="card mt16"><label class="full"><span class="formlabel">Today\'s notes</span>' +
+        '<textarea id="dayNotes" rows="3" placeholder="How this workout felt, swaps, reminders for next time...">' + esc((latestDayNote() || {}).Journal || '') + '</textarea></label>' +
+        '<button class="bigbtn subtle mt16" data-action="save-day-note"><i data-lucide="notebook-pen"></i>Save note</button></div>' +
       '<button class="bigbtn mt16" data-action="finish"><i data-lucide="flag"></i>Finish workout</button>'
     );
   }
@@ -575,14 +660,19 @@
   function renderLibrary() {
     const L = state.lib;
     const cats = ['All'].concat([...new Set(state.exercises.map(e => e.Category).filter(Boolean))].sort());
-    const places = ['All', 'Home', 'Gym'];
+    const places = ['All', 'Home', 'Gym', 'Machine', 'Cable'];
     const diffs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
 
     let list = state.exercises.filter(e => {
       if (CFG.backSafe && String(e.BackFlag).toLowerCase() === 'red') return false;
       if (L.q && !(e.ExerciseName + ' ' + e.PrimaryMuscles + ' ' + e.Equipment + ' ' + e.MovementPattern).toLowerCase().includes(L.q.toLowerCase())) return false;
       if (L.cat !== 'All' && e.Category !== L.cat) return false;
-      if (L.place !== 'All' && !(String(e.BestFor || '').includes(L.place))) return false;
+      if (L.place !== 'All') {
+        const hay = (e.ExerciseName + ' ' + e.Equipment + ' ' + e.BestFor).toLowerCase();
+        if (L.place === 'Machine' && !hay.includes('machine')) return false;
+        else if (L.place === 'Cable' && !hay.includes('cable')) return false;
+        else if (!['Machine', 'Cable'].includes(L.place) && !(String(e.BestFor || '').includes(L.place))) return false;
+      }
       if (L.diff !== 'All' && e.Difficulty !== L.diff) return false;
       return true;
     });
@@ -842,6 +932,55 @@
     );
   }
 
+  function exercisePickerHtml(q) {
+    const needle = String(q || '').toLowerCase();
+    const list = state.exercises.filter(e => {
+      if (CFG.backSafe && String(e.BackFlag).toLowerCase() === 'red') return false;
+      const hay = (e.ExerciseName + ' ' + e.PrimaryMuscles + ' ' + e.Equipment + ' ' + e.MovementPattern).toLowerCase();
+      return !needle || hay.includes(needle);
+    }).slice(0, 36);
+    return '<div class="searchwrap"><i data-lucide="search"></i>' +
+        '<input id="routineSearch" type="search" placeholder="Search exercises, machines, cables..." value="' + esc(q || '') + '" autofocus></div>' +
+      '<div class="resultcount">' + list.length + ' shown from ' + state.exercises.length + '</div>' +
+      '<div class="pickerlist">' + list.map(e =>
+        '<div class="pickeritem">' +
+          '<button class="libitem picker-main" data-action="open-exercise" data-id="' + esc(e.ExerciseID) + '">' +
+            '<span class="flag ' + flagClass(e.BackFlag) + '"></span>' +
+            '<span class="libitem-body"><div class="libitem-name">' + esc(e.ExerciseName) + '</div>' +
+              '<div class="libitem-meta">' + esc([e.PrimaryMuscles, e.Equipment, e.Difficulty].filter(Boolean).join(' - ')) + '</div></span>' +
+          '</button>' +
+          '<button class="miniadd" data-action="add-routine-exercise" data-id="' + esc(e.ExerciseID) + '" aria-label="Add ' + esc(e.ExerciseName) + '"><i data-lucide="plus"></i></button>' +
+        '</div>').join('') + '</div>' +
+      (list.length ? '' : '<div class="empty"><i data-lucide="search-x"></i><div>No exercise matches that search.</div></div>');
+  }
+
+  function openAddExercise() {
+    state.routine.q = state.routine.q || '';
+    openModal(
+      '<div class="sheet-title">Add exercise</div>' +
+      '<div class="sheet-sub">Adds to ' + esc(displayNameFor(currentUser())) + '\'s routine for today.</div>' +
+      '<div id="exercisePicker">' + exercisePickerHtml(state.routine.q) + '</div>'
+    );
+    const input = $('#routineSearch');
+    if (input) input.focus();
+  }
+
+  function openAddProfile() {
+    openModal(
+      '<div class="sheet-title">Add profile</div>' +
+      '<div class="sheet-sub">Creates a separate profile row in the club sheet.</div>' +
+      '<div class="formgrid">' +
+        '<label class="full"><span class="formlabel">Name</span><input id="newProfileName" type="text" autocomplete="name" placeholder="Maya"></label>' +
+        '<label class="full"><span class="formlabel">Goal</span><input id="newProfileGoal" type="text" placeholder="Strength, fat loss, running"></label>' +
+        '<label><span class="formlabel">Location</span><select id="newProfileLocation"><option>Gym</option><option>Home</option><option>Home + Gym</option></select></label>' +
+        '<label><span class="formlabel">Level</span><select id="newProfileLevel"><option>Beginner</option><option>Novice</option><option>Intermediate</option><option>Advanced</option></select></label>' +
+      '</div>' +
+      '<button class="bigbtn mt16" data-action="save-new-profile"><i data-lucide="user-plus"></i>Add profile</button>'
+    );
+    const input = $('#newProfileName');
+    if (input) input.focus();
+  }
+
   function openFinish() {
     const wid = state.workoutId;
     openModal(
@@ -870,7 +1009,9 @@
       '<div class="kv" style="margin-bottom:12px"><span class="k">Sync</span><span class="v">Read ' + esc(timeAgo(state.sync.lastReadAt)) +
         ' · write ' + esc(timeAgo(state.sync.lastWriteAt)) + (q ? ' · ' + q + ' queued' : '') +
         (state.sync.lastError ? ' · ' + esc(state.sync.lastError) : '') + '</span></div>' +
+      '<div class="kv" style="margin-bottom:12px"><span class="k">Timers</span><span class="v">Writes retry every 30 sec. Logs read every 2 min. Plans and profiles read every 10 min.</span></div>' +
       '<label><span class="formlabel">Profile</span><select id="setUser">' + profileOptions + '</select></label>' +
+      '<button class="bigbtn subtle mt16" data-action="open-add-profile"><i data-lucide="user-plus"></i>Add profile</button>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Google Sheet ID</span><input id="setSheet" placeholder="1AbC…" value="' + esc(CFG.sheetId) + '"></label>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Apps Script web app URL</span><input id="setScript" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(CFG.scriptUrl) + '"></label>' +
       '<div class="kv mt16" style="border-bottom:none;align-items:center;margin-top:10px"><span class="k">Back-safe</span>' +
@@ -944,6 +1085,45 @@
     render();
   }
 
+  function saveDayNote() {
+    const text = (($('#dayNotes') || {}).value || '').trim();
+    if (!text) { toast('Add a note first.', 'circle-alert', true); return; }
+    const rec = {
+      EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
+      Mood: 'Note', Energy_1_10: '', SleepHours: '', BackPain_0_10: '', BodyWeight_lb: '',
+      CaloriesEstimate: '', ProteinEstimate_g: '',
+      Journal: text, UpdatedAt: new Date().toISOString(),
+    };
+    const logs = lsGet('ef_journal', []); logs.push(rec); lsSet('ef_journal', logs);
+    post('appendJournal', rec).then(() => updateSyncBadge());
+    toast('Workout note saved.', 'notebook-pen');
+    render();
+  }
+
+  function saveNewProfile() {
+    const display = (($('#newProfileName') || {}).value || '').trim();
+    if (!display) { toast('Profile name first.', 'circle-alert', true); return; }
+    const userName = compactId(display).split('_').map(part => part ? part[0] + part.slice(1).toLowerCase() : '').join('') || display;
+    if (state.users.some(u => u.UserName.toLowerCase() === userName.toLowerCase())) {
+      toast('That profile already exists.', 'circle-alert', true);
+      return;
+    }
+    const rec = {
+      UserName: userName,
+      DisplayName: display,
+      Goal: (($('#newProfileGoal') || {}).value || '').trim(),
+      TrainingLocation: (($('#newProfileLocation') || {}).value || ''),
+      ExperienceLevel: (($('#newProfileLevel') || {}).value || ''),
+      Active: 'Yes',
+    };
+    appendAndPost('appendUser', state.users, rec);
+    saveSettings({ user: rec.UserName });
+    state.workoutId = null;
+    closeModal();
+    toast('Profile added for ' + rec.DisplayName + '.', 'user-plus');
+    render();
+  }
+
   function exportData() {
     const data = {};
     ['ef_settings', 'ef_setlogs', 'ef_runlogs', 'ef_journal', 'ef_queue'].forEach(k => { data[k] = lsGet(k, null); });
@@ -973,7 +1153,7 @@
   /* ---------------- render + events ---------------- */
 
   function render() {
-    const views = { today: renderToday, library: renderLibrary, run: renderRun, progress: renderProgress, journal: renderJournal };
+    const views = { today: renderToday, library: renderLibrary, run: renderRun, progress: renderProgress };
     $('#view').innerHTML = (views[state.tab] || renderToday)();
     lucide.createIcons({ nodes: [$('#view')] });
     updateProfileBadge();
@@ -981,7 +1161,7 @@
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
   }
 
-  document.addEventListener('click', (ev) => {
+  document.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('[data-action], .tab');
     if (!btn) return;
 
@@ -997,6 +1177,19 @@
     const wid = state.workoutId;
 
     if (a === 'pick-workout') { state.workoutId = btn.dataset.id; render(); }
+    else if (a === 'create-today-routine' || a === 'customize-today') {
+      ensureTodayRoutine(state.workoutId);
+      toast('Today\'s routine is ready for ' + displayNameFor(currentUser()) + '.', 'copy-plus');
+      render();
+    }
+    else if (a === 'open-add-exercise') { openAddExercise(); }
+    else if (a === 'add-routine-exercise') {
+      if (addExerciseToRoutine(btn.dataset.id)) {
+        closeModal();
+        toast('Exercise added to today.', 'plus');
+        render();
+      }
+    }
 
     else if (a === 'inc' || a === 'dec') {
       const sess = getSession(wid); const exId = btn.dataset.ex; const i = Number(btn.dataset.i);
@@ -1081,7 +1274,8 @@
     else if (a === 'lib-filter') { state.lib[btn.dataset.key] = btn.dataset.v; state.lib.limit = 120; render(); }
     else if (a === 'lib-more') { state.lib.limit = (state.lib.limit || 120) + 200; render(); }
     else if (a === 'save-run') { saveRun(); }
-    else if (a === 'save-journal') { saveJournal(); }
+    else if (a === 'save-day-note') { saveDayNote(); }
+    else if (a === 'save-journal') { saveDayNote(); }
     else if (a === 'close-modal') { closeModal(); }
 
     else if (a === 'toggle-backsafe') {
@@ -1089,6 +1283,8 @@
       btn.classList.toggle('active', CFG.backSafe);
       btn.textContent = CFG.backSafe ? 'Hiding red-flag exercises' : 'Showing everything';
     }
+    else if (a === 'open-add-profile') { openAddProfile(); }
+    else if (a === 'save-new-profile') { saveNewProfile(); }
     else if (a === 'save-settings') {
       saveSettings({ user: $('#setUser').value.trim() || 'Azhar', sheetId: $('#setSheet').value.trim(), scriptUrl: $('#setScript').value.trim() });
       state.workoutId = null;
@@ -1120,6 +1316,20 @@
         render();
         const inp = $('#libSearch'); if (inp) { inp.focus(); inp.setSelectionRange(pos, pos); }
       }, 220);
+    }
+    if (ev.target.id === 'routineSearch') {
+      state.routine.q = ev.target.value;
+      clearTimeout(state._routineSearchT);
+      state._routineSearchT = setTimeout(() => {
+        const pos = ev.target.selectionStart;
+        const picker = $('#exercisePicker');
+        if (picker) {
+          picker.innerHTML = exercisePickerHtml(state.routine.q);
+          lucide.createIcons({ nodes: [picker] });
+          const inp = $('#routineSearch');
+          if (inp) { inp.focus(); inp.setSelectionRange(pos, pos); }
+        }
+      }, 180);
     }
     if (ev.target.id === 'runDist' || ev.target.id === 'runMin') {
       const dist = Number($('#runDist').value), mins = Number($('#runMin').value);

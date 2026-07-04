@@ -223,6 +223,11 @@ select { background-image: none; }
 }
 .toolbtn:active { background: var(--walnut); }
 .toolbtn svg { width: 15px; height: 15px; }
+.actionrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 14px; }
+.actiontool {
+  border: 1px solid var(--hairline-soft); background: rgba(242, 236, 223, 0.03);
+  min-height: 44px; padding: 10px 8px;
+}
 
 .videowrap { padding: 0 18px 14px; }
 .videowrap iframe {
@@ -267,6 +272,17 @@ select { background-image: none; }
 .libitem-meta { color: var(--taupe-dim); font-size: 0.76rem; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .libitem svg { width: 16px; height: 16px; color: var(--taupe-dim); flex: 0 0 auto; }
 .resultcount { color: var(--taupe-dim); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; margin: 4px 0 2px; }
+.pickerlist { margin-top: 8px; }
+.pickeritem {
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px;
+  align-items: center; border-bottom: 1px solid var(--hairline-soft);
+}
+.pickeritem .libitem { border-bottom: none; min-width: 0; }
+.miniadd {
+  width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--hairline);
+  color: var(--champagne); display: grid; place-items: center; background: var(--champagne-soft);
+}
+.miniadd svg { width: 18px; height: 18px; }
 
 /* ---------- stats ---------- */
 .statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
