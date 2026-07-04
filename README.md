@@ -25,6 +25,7 @@ YouTube       = form videos (links/embeds only)
 ## Workout Helpers
 
 - Optional warm-up pill adds a simple full-body prep block to today's profile-owned routine.
+- Today's focus map highlights the muscle groups hit by the current workout using exercise primary/secondary muscle metadata.
 - Daily pre-workout checklist tracks creatine, pre-workout, caffeine, protein, and supplements with a dated prep note.
 - Gym Tools includes plate math and estimated 1RM calculators.
 - If the same top set repeats for four sessions, a dismissible nudge suggests adding reps, weight, or a harder variation.

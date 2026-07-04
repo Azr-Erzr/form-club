@@ -583,6 +583,118 @@
   function getPrep(date) { return lsGet(prepKey(date), { items: {}, updatedAt: '' }); }
   function setPrep(prep, date) { lsSet(prepKey(date), prep); }
 
+  const MUSCLE_GROUPS = {
+    chest: 'Chest',
+    shoulders: 'Shoulders',
+    biceps: 'Biceps',
+    triceps: 'Triceps',
+    forearms: 'Forearms',
+    abs: 'Core',
+    upperBack: 'Upper back',
+    lats: 'Lats',
+    lowerBack: 'Low back',
+    glutes: 'Glutes',
+    quads: 'Quads',
+    hamstrings: 'Hamstrings',
+    calves: 'Calves',
+    hips: 'Hips',
+    neck: 'Neck',
+  };
+
+  function muscleKey(name) {
+    const n = String(name || '').toLowerCase().trim();
+    if (!n) return '';
+    if (n.includes('chest') || n.includes('pector')) return 'chest';
+    if (n.includes('shoulder') || n.includes('delt')) return 'shoulders';
+    if (n.includes('bicep')) return 'biceps';
+    if (n.includes('tricep')) return 'triceps';
+    if (n.includes('forearm') || n.includes('grip')) return 'forearms';
+    if (n.includes('abdominal') || n === 'abs' || n.includes('core') || n.includes('oblique')) return 'abs';
+    if (n.includes('lat')) return 'lats';
+    if (n.includes('trap') || n.includes('rhomboid') || n.includes('middle back') || n.includes('upper back')) return 'upperBack';
+    if (n.includes('low back') || n.includes('lower back') || n.includes('erector')) return 'lowerBack';
+    if (n.includes('glute')) return 'glutes';
+    if (n.includes('quad')) return 'quads';
+    if (n.includes('hamstring')) return 'hamstrings';
+    if (n.includes('calf') || n.includes('calves') || n.includes('soleus') || n.includes('gastro')) return 'calves';
+    if (n.includes('adductor') || n.includes('abductor') || n.includes('hip')) return 'hips';
+    if (n.includes('neck')) return 'neck';
+    return '';
+  }
+
+  function addMuscleScore(scores, names, weight) {
+    String(names || '').split(/[,/|;]/).map(s => s.trim()).filter(Boolean).forEach(name => {
+      const key = muscleKey(name);
+      if (key) scores[key] = (scores[key] || 0) + weight;
+    });
+  }
+
+  function muscleFocusForRows(rows) {
+    const scores = {};
+    rows.forEach(row => {
+      const ex = exById(row.ExerciseID);
+      if (!ex) return;
+      addMuscleScore(scores, ex.PrimaryMuscles, 2);
+      addMuscleScore(scores, ex.SecondaryMuscles, 1);
+    });
+    const max = Math.max(1, ...Object.values(scores));
+    return Object.entries(scores)
+      .map(([key, score]) => ({ key, label: MUSCLE_GROUPS[key] || key, score, heat: Math.max(0.32, score / max) }))
+      .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+  }
+
+  function muscleRegion(focus, key, shape) {
+    const item = focus.find(m => m.key === key);
+    const heat = item ? item.heat : 0;
+    return shape.replace('HEAT', heat ? heat.toFixed(2) : '0');
+  }
+
+  function anatomyDiagramHtml(rows) {
+    const focus = muscleFocusForRows(rows);
+    if (!focus.length) return '';
+    const chips = focus.slice(0, 7).map(m =>
+      '<span class="musclechip" style="--heat:' + m.heat.toFixed(2) + '">' + esc(m.label) + '</span>'
+    ).join('');
+    return '<div class="card anatomy-card">' +
+      '<div class="minihead"><span>Today\'s focus</span><span>' + rows.length + ' moves</span></div>' +
+      '<div class="anatomy-wrap">' +
+        '<svg class="anatomy-svg" viewBox="0 0 260 170" role="img" aria-label="Muscle groups trained today">' +
+          '<g class="bodyline" transform="translate(22 8)">' +
+            '<circle cx="48" cy="16" r="11"></circle><path d="M48 28v42M30 44l18-10 18 10M36 68l-8 42M60 68l8 42M42 110l-7 34M54 110l7 34"></path>' +
+            '<path d="M30 44l-10 38M66 44l10 38"></path>' +
+          '</g>' +
+          '<g class="bodyline" transform="translate(150 8)">' +
+            '<circle cx="48" cy="16" r="11"></circle><path d="M48 28v42M30 44l18-10 18 10M36 68l-8 42M60 68l8 42M42 110l-7 34M54 110l7 34"></path>' +
+            '<path d="M30 44l-10 38M66 44l10 38"></path>' +
+          '</g>' +
+          '<g class="muscles front" transform="translate(22 8)">' +
+            muscleRegion(focus, 'neck', '<path style="--heat:HEAT" d="M42 27h12v9H42z"></path>') +
+            muscleRegion(focus, 'chest', '<path style="--heat:HEAT" d="M32 42c8-9 24-9 32 0l-5 20c-7-4-15-4-22 0z"></path>') +
+            muscleRegion(focus, 'shoulders', '<path style="--heat:HEAT" d="M24 43c4-8 10-10 16-7l-5 14c-5-1-8-3-11-7zM56 36c6-3 12-1 16 7-3 4-6 6-11 7z"></path>') +
+            muscleRegion(focus, 'biceps', '<path style="--heat:HEAT" d="M18 51c5 2 8 6 7 12l-5 17c-5-4-7-8-6-14zM78 51c-5 2-8 6-7 12l5 17c5-4 7-8 6-14z"></path>') +
+            muscleRegion(focus, 'forearms', '<path style="--heat:HEAT" d="M13 75c5 2 7 5 7 10l-5 18c-5-4-7-8-6-13zM83 75c-5 2-7 5-7 10l5 18c5-4 7-8 6-13z"></path>') +
+            muscleRegion(focus, 'abs', '<path style="--heat:HEAT" d="M38 61h20l4 29c-8 5-20 5-28 0z"></path>') +
+            muscleRegion(focus, 'hips', '<path style="--heat:HEAT" d="M34 91c9 5 19 5 28 0l7 17c-13 6-29 6-42 0z"></path>') +
+            muscleRegion(focus, 'quads', '<path style="--heat:HEAT" d="M28 111c8 2 12 8 12 17l-5 22c-8-6-11-14-11-26zM68 111c-8 2-12 8-12 17l5 22c8-6 11-14 11-26z"></path>') +
+            muscleRegion(focus, 'calves', '<path style="--heat:HEAT" d="M30 139c6 3 8 8 7 16l-5 8c-6-6-8-13-7-21zM66 139c-6 3-8 8-7 16l5 8c6-6 8-13 7-21z"></path>') +
+          '</g>' +
+          '<g class="muscles back" transform="translate(150 8)">' +
+            muscleRegion(focus, 'upperBack', '<path style="--heat:HEAT" d="M32 39c10-7 22-7 32 0l-7 27H39z"></path>') +
+            muscleRegion(focus, 'lats', '<path style="--heat:HEAT" d="M28 48c7 3 11 10 12 20l-5 21c-7-8-11-20-12-33zM68 48c-7 3-11 10-12 20l5 21c7-8 11-20 12-33z"></path>') +
+            muscleRegion(focus, 'shoulders', '<path style="--heat:HEAT" d="M24 43c4-8 10-10 16-7l-5 14c-5-1-8-3-11-7zM56 36c6-3 12-1 16 7-3 4-6 6-11 7z"></path>') +
+            muscleRegion(focus, 'triceps', '<path style="--heat:HEAT" d="M18 51c5 2 8 6 7 12l-5 17c-5-4-7-8-6-14zM78 51c-5 2-8 6-7 12l5 17c5-4 7-8 6-14z"></path>') +
+            muscleRegion(focus, 'lowerBack', '<path style="--heat:HEAT" d="M38 67h20l5 25c-9 5-21 5-30 0z"></path>') +
+            muscleRegion(focus, 'glutes', '<path style="--heat:HEAT" d="M31 92c9-5 15-2 17 8 2-10 8-13 17-8l2 18c-12 6-26 6-38 0z"></path>') +
+            muscleRegion(focus, 'hamstrings', '<path style="--heat:HEAT" d="M28 111c8 2 12 8 12 17l-5 22c-8-6-11-14-11-26zM68 111c-8 2-12 8-12 17l5 22c8-6 11-14 11-26z"></path>') +
+            muscleRegion(focus, 'calves', '<path style="--heat:HEAT" d="M30 139c6 3 8 8 7 16l-5 8c-6-6-8-13-7-21zM66 139c-6 3-8 8-7 16l5 8c6-6 8-13 7-21z"></path>') +
+          '</g>' +
+          '<text x="70" y="166">front</text><text x="198" y="166">back</text>' +
+        '</svg>' +
+      '</div>' +
+      '<div class="musclechips">' + chips + '</div>' +
+    '</div>';
+  }
+
   function suggestedWorkoutId() {
     const mine = profileWorkouts();
     const dow = new Date().getDay(); // 0 Sun
@@ -993,6 +1105,7 @@
         '<button class="toolbtn actiontool" data-action="open-tools"><i data-lucide="calculator"></i>Tools</button>' +
       '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
+      (workout ? anatomyDiagramHtml(rowsForWorkout(wid)) : '') +
       cards +
       '<div class="card mt16 prep-card"><div class="minihead"><span>Pre-workout checklist</span>' +
         (prep.updatedAt ? '<button class="infobtn" data-action="open-time-info" aria-label="Time info"><i data-lucide="info"></i></button>' : '') + '</div>' +
