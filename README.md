@@ -22,6 +22,22 @@ YouTube       = form videos (links/embeds only)
 - **Run** - distance/time in, pace/speed out, friendly weekly comparison
 - **Progress** - weekly stats, streak, push-up ladder, back-pain trend, club table
 
+## Device Features
+
+- Rest timers use the screen wake lock when available, haptics when supported,
+  and a short local chime if timer sound is enabled.
+- AirPods/headset media controls are best-effort: while a timer or motion coach
+  owns the browser media session, play/pause/stop-style controls may stop the
+  timer or finish the motion set. iOS does not expose AirPods taps directly to a
+  web app.
+- Motion coach uses phone motion events after permission. It is meant for a
+  phone in a pocket/armband during a set, not for a phone sitting on the floor.
+- Quick Log supports speech recognition where the browser allows it, with a
+  typed fallback such as `bench press 135 eight reps`.
+- HealthKit, Apple Watch heart rate/workout sessions, and AirPods sensor data
+  require native iOS/watchOS code and are intentionally out of scope for this
+  PWA.
+
 ## Setup (once)
 
 1. **Sheet** - open a new Google Sheet -> Extensions -> Apps Script -> paste
@@ -62,6 +78,9 @@ legacy/backward-compatible tabs. New log writes go into monthly tabs like
 `Run_Log_2026_07`, `Exercise_Log_2026_07`, and `Journal_2026_07`. The app
 prefers the Apps Script `readLogs` endpoint, which returns a bounded recent
 window instead of forcing phones to download every historical log row.
+
+`Profile_Stats` tracks manual height, weight, resting heart rate, and notes over
+time without needing Apple Health or another database.
 
 ## Guardrails
 

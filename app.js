@@ -9,7 +9,10 @@
 
   /* ---------------- config + storage ---------------- */
 
-  const DEFAULTS = { sheetId: '', scriptUrl: '', user: 'Azhar', backSafe: true };
+  const DEFAULTS = {
+    sheetId: '', scriptUrl: '', user: 'Azhar', backSafe: true,
+    timerSound: true, timerVibrate: true, motionCoach: true,
+  };
   const DEFAULT_USERS = ['Azhar', 'Koby', 'Gianluca', 'Patrick', 'Adriano']
     .map(name => ({ UserName: name, DisplayName: name, Goal: '', TrainingLocation: '', ExperienceLevel: '', Active: 'Yes' }));
   const READ_REFRESH_MS = 2 * 60 * 1000;
@@ -131,12 +134,15 @@
   const state = {
     tab: initialTab(),
     exercises: [], workouts: [], days: [], users: DEFAULT_USERS.slice(),
-    remote: { runs: [], sets: [], journal: [], loaded: false },
+    remote: { runs: [], sets: [], journal: [], profileStats: [], loaded: false },
     source: 'local',
     lib: { q: '', cat: 'All', place: 'All', diff: 'All' },
     routine: { q: '' },
     workoutId: null,
     restEnd: 0, restTimer: null,
+    audioCtx: null, wakeLock: null, mediaSessionMode: '',
+    motion: { active: false, exId: '', wdId: '', reps: 0, lastPeakAt: 0, lastCueAt: 0, avgTempo: 0, samples: [] },
+    voiceDraft: null,
     sync: { reading: false, writing: false, lastReadAt: 0, lastWriteAt: 0, lastCoreAt: 0, lastError: '' },
   };
 
@@ -207,7 +213,7 @@
   async function fetchBoundedLogs() {
     const j = await fetchScriptJson({ action: 'readLogs', days: LOG_READ_DAYS });
     if (!j || !Array.isArray(j.runs) || !Array.isArray(j.sets) || !Array.isArray(j.journal)) return null;
-    return { runs: j.runs, sets: j.sets, journal: j.journal, since: j.since };
+    return { runs: j.runs, sets: j.sets, journal: j.journal, profileStats: Array.isArray(j.profileStats) ? j.profileStats : [], since: j.since };
   }
 
   async function fetchTable(tab, localFile) {
@@ -257,12 +263,12 @@
     try {
       const bounded = await fetchBoundedLogs();
       if (bounded) {
-        state.remote = { runs: bounded.runs, sets: bounded.sets, journal: bounded.journal, loaded: true };
+        state.remote = { runs: bounded.runs, sets: bounded.sets, journal: bounded.journal, profileStats: bounded.profileStats, loaded: true };
       } else {
-        const [runs, sets, journal] = await Promise.all([
-          fetchTable('Run_Log'), fetchTable('Exercise_Log'), fetchTable('Journal'),
+        const [runs, sets, journal, profileStats] = await Promise.all([
+          fetchTable('Run_Log'), fetchTable('Exercise_Log'), fetchTable('Journal'), fetchTable('Profile_Stats'),
         ]);
-        state.remote = { runs, sets, journal, loaded: true };
+        state.remote = { runs, sets, journal, profileStats, loaded: true };
       }
       state.sync.lastReadAt = Date.now();
       state.sync.lastError = '';
@@ -287,6 +293,7 @@
   const allRuns = () => mergedLogs('ef_runlogs', state.remote.runs, 'LogID');
   const allSets = () => mergedLogs('ef_setlogs', state.remote.sets, 'LogID');
   const allJournal = () => mergedLogs('ef_journal', state.remote.journal, 'EntryID');
+  const allProfileStats = () => mergedLogs('ef_profile_stats', state.remote.profileStats, 'StatID');
 
   /* ---------------- write-back + queue ---------------- */
 
@@ -426,6 +433,82 @@
     setTimeout(() => el.remove(), 3800);
   }
 
+  /* ---------------- device helpers ---------------- */
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return false;
+    try {
+      if (state.wakeLock) return true;
+      state.wakeLock = await navigator.wakeLock.request('screen');
+      state.wakeLock.addEventListener('release', () => { state.wakeLock = null; });
+      return true;
+    } catch (e) { return false; }
+  }
+  async function releaseWakeLock() {
+    try {
+      if (state.wakeLock) await state.wakeLock.release();
+    } catch (e) {}
+    state.wakeLock = null;
+  }
+  function vibrate(pattern) {
+    if (CFG.timerVibrate && navigator.vibrate) navigator.vibrate(pattern);
+  }
+  function ensureAudio() {
+    if (!CFG.timerSound) return null;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!state.audioCtx) state.audioCtx = new AC();
+    if (state.audioCtx.state === 'suspended') state.audioCtx.resume().catch(() => {});
+    return state.audioCtx;
+  }
+  function playTone(type) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const notes = type === 'cue' ? [660] : [523, 659, 784];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + i * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + i * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.14);
+      osc.stop(now + i * 0.14 + 0.13);
+    });
+  }
+  function setupMediaSession(mode, title) {
+    if (!('mediaSession' in navigator)) return;
+    state.mediaSessionMode = mode || '';
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title || 'Form timer',
+        artist: 'Form exercise club',
+        album: mode === 'rest' ? 'Rest timer' : 'Set coach',
+      });
+      const stop = () => {
+        if (state.mediaSessionMode === 'rest') stopRest(true);
+        else if (state.mediaSessionMode === 'motion') finishMotionSet();
+      };
+      ['pause', 'stop', 'previoustrack', 'nexttrack'].forEach(action => {
+        try { navigator.mediaSession.setActionHandler(action, stop); } catch (e) {}
+      });
+      try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {}
+    } catch (e) {}
+  }
+  function clearMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    state.mediaSessionMode = '';
+    try {
+      ['pause', 'stop', 'previoustrack', 'nexttrack'].forEach(action => {
+        try { navigator.mediaSession.setActionHandler(action, null); } catch (e) {}
+      });
+      navigator.mediaSession.playbackState = 'none';
+    } catch (e) {}
+  }
+
   /* ---------------- modal ---------------- */
 
   function openModal(html) {
@@ -443,10 +526,13 @@
   /* ---------------- rest timer ---------------- */
 
   function startRest(seconds, label) {
+    ensureAudio();
+    requestWakeLock();
     state.restEnd = Date.now() + seconds * 1000;
     state.restLabel = label || 'rest';
     $('.restbar-label').textContent = state.restLabel;
     $('#restbar').hidden = false;
+    setupMediaSession('rest', state.restLabel === 'walk' ? 'Walk timer' : 'Rest timer');
     if (state.restTimer) clearInterval(state.restTimer);
     state.restTimer = setInterval(tickRest, 250);
     tickRest();
@@ -457,14 +543,18 @@
     $('#restTime').textContent = m + ':' + String(s).padStart(2, '0');
     if (left <= 0) {
       stopRest();
-      if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+      playTone('done');
+      vibrate([140, 70, 140, 70, 220]);
       toast(state.restLabel === 'walk' ? 'Walk done — log it in the Run tab.' : 'Rest is over — next set.', 'timer');
     }
   }
-  function stopRest() {
+  function stopRest(fromRemote) {
     if (state.restTimer) clearInterval(state.restTimer);
     state.restTimer = null;
     $('#restbar').hidden = true;
+    clearMediaSession();
+    releaseWakeLock();
+    if (fromRemote) toast('Timer stopped from audio controls.', 'headphones');
   }
 
   /* ---------------- session (Today) ---------------- */
@@ -498,6 +588,100 @@
     });
     const good = Object.values(byDate).filter(d => d.n >= (Number(targetSets) || 2) && d.pain <= 4);
     return good.length >= 2;
+  }
+
+  function nextSetIndex(wid, exId, row) {
+    const sess = getSession(wid);
+    const arr = sess.sets[exId] || [];
+    const planned = Math.max(Number(row && row.TargetSets) || 1, arr.length || 1);
+    for (let i = 0; i < planned; i++) {
+      if (!arr[i] || !arr[i].done) return i;
+    }
+    return planned;
+  }
+
+  async function requestMotionAccess() {
+    const DME = window.DeviceMotionEvent;
+    if (!DME) return false;
+    if (typeof DME.requestPermission === 'function') {
+      try { return await DME.requestPermission() === 'granted'; } catch (e) { return false; }
+    }
+    return true;
+  }
+
+  async function startMotionSet(exId, wdId) {
+    if (!CFG.motionCoach) { toast('Motion coach is off in Settings.', 'activity', true); return; }
+    const ok = await requestMotionAccess();
+    if (!ok) { toast('Motion access was not allowed on this phone.', 'activity', true); return; }
+    stopMotionSet(false);
+    const ex = exById(exId) || { ExerciseName: exId };
+    state.motion = { active: true, exId, wdId, reps: 0, lastPeakAt: 0, lastCueAt: 0, avgTempo: 0, samples: [] };
+    $('#motionMain').textContent = ex.ExerciseName;
+    $('#motionSub').textContent = 'Move with control - finish when the set is done';
+    $('#motionbar').hidden = false;
+    window.addEventListener('devicemotion', handleMotionSample);
+    requestWakeLock();
+    setupMediaSession('motion', 'Motion set coach');
+    playTone('cue');
+    vibrate(35);
+  }
+
+  function handleMotionSample(ev) {
+    if (!state.motion.active) return;
+    const a = ev.acceleration || ev.accelerationIncludingGravity || {};
+    const x = Number(a.x || 0), y = Number(a.y || 0), z = Number(a.z || 0);
+    const mag = Math.sqrt(x * x + y * y + z * z);
+    if (!isFinite(mag)) return;
+    const samples = state.motion.samples;
+    samples.push(mag);
+    if (samples.length > 16) samples.shift();
+    const avg = samples.reduce((n, v) => n + v, 0) / samples.length;
+    const now = Date.now();
+    const pulse = Math.abs(mag - avg);
+    if (pulse < 2.4 || now - state.motion.lastPeakAt < 420) return;
+    const gap = state.motion.lastPeakAt ? now - state.motion.lastPeakAt : 0;
+    state.motion.lastPeakAt = now;
+    state.motion.reps += 1;
+    if (gap) state.motion.avgTempo = state.motion.avgTempo ? (state.motion.avgTempo * 0.7 + gap * 0.3) : gap;
+    const pace = state.motion.avgTempo ? Math.round(state.motion.avgTempo / 100) / 10 : 0;
+    let cue = 'good tempo';
+    if (gap && gap < 750) cue = 'slow it down';
+    else if (gap && gap > 2600) cue = 'keep steady';
+    $('#motionSub').textContent = state.motion.reps + ' pulses - ' + cue + (pace ? ' - ' + pace + 's rhythm' : '');
+    if (now - state.motion.lastCueAt > 5000) {
+      state.motion.lastCueAt = now;
+      if (cue !== 'good tempo') { playTone('cue'); vibrate(45); }
+    }
+  }
+
+  function stopMotionSet(showToast) {
+    if (state.motion.active) window.removeEventListener('devicemotion', handleMotionSample);
+    state.motion.active = false;
+    $('#motionbar').hidden = true;
+    clearMediaSession();
+    releaseWakeLock();
+    if (showToast) toast('Motion coach stopped.', 'activity');
+  }
+
+  function finishMotionSet() {
+    if (!state.motion.active) return;
+    const wid = state.workoutId;
+    const row = state.days.find(r => r.WorkoutID === wid && (r.WorkoutDayID === state.motion.wdId || r.ExerciseID === state.motion.exId));
+    const exId = state.motion.exId;
+    const i = nextSetIndex(wid, exId, row);
+    const sess = getSession(wid);
+    sess.sets[exId] = sess.sets[exId] || [];
+    sess.sets[exId][i] = sess.sets[exId][i] || { count: Math.max(state.motion.reps, repsDefault(row && row.TargetRepsOrTime)), done: false };
+    sess.sets[exId][i].count = Math.max(state.motion.reps || 0, sess.sets[exId][i].count || 0);
+    sess.sets[exId][i].done = true;
+    setSession(wid, sess);
+    const reps = state.motion.reps;
+    stopMotionSet(false);
+    logSet(exId, i, row);
+    const rest = Number((row && row.RestSeconds) || 60);
+    if (rest > 0) startRest(rest);
+    toast('Set logged' + (reps ? ' from motion: ' + reps + ' pulses.' : '.'), 'check-circle-2');
+    render();
   }
 
   function rowsForWorkout(wid) {
@@ -570,6 +754,11 @@
   function latestDayNote() {
     return allJournal().filter(j => j.UserName === currentUser() && String(j.Date).slice(0, 10) === todayStr() && j.Journal && j.Mood === 'Note')
       .sort((a, b) => String(b.UpdatedAt || '').localeCompare(String(a.UpdatedAt || '')))[0];
+  }
+
+  function profileStatsFor(name) {
+    return allProfileStats().filter(s => s.UserName === (name || currentUser()))
+      .sort((a, b) => String(b.Date || '').localeCompare(String(a.Date || '')) || String(b.UpdatedAt || '').localeCompare(String(a.UpdatedAt || '')));
   }
 
   /* ---------------- views ---------------- */
@@ -648,6 +837,7 @@
             '<button class="toolbtn" data-action="toggle-video" data-ex="' + esc(row.ExerciseID) + '" data-vid="' + esc(vid) + '" data-name="' + esc(ex.ExerciseName) + '" data-search="' + esc(ex.YouTubeSearchURL || '') + '">' +
               '<i data-lucide="' + (vid ? 'play' : 'youtube') + '"></i>' + (vid ? 'Form video' : 'Find video') + '</button>' +
             '<button class="toolbtn" data-action="toggle-details" data-ex="' + esc(row.ExerciseID) + '"><i data-lucide="sliders-horizontal"></i>Details</button>' +
+            '<button class="toolbtn" data-action="motion-set" data-ex="' + esc(row.ExerciseID) + '" data-wd="' + esc(row.WorkoutDayID) + '"><i data-lucide="activity"></i>Motion</button>' +
             '<button class="toolbtn" data-action="add-set" data-ex="' + esc(row.ExerciseID) + '"><i data-lucide="plus"></i>Add set</button>' +
             '<button class="toolbtn" data-action="rest" data-sec="' + esc(row.RestSeconds || ex.RestSeconds || 60) + '"><i data-lucide="timer"></i>' + esc(row.RestSeconds || ex.RestSeconds || 60) + 's</button>' +
           '</div>' +
@@ -674,6 +864,7 @@
       '<div class="actionrow">' +
         '<button class="toolbtn actiontool" data-action="customize-today"><i data-lucide="copy-plus"></i>' + (isTodayWorkout(wid) ? 'Today routine' : 'Customize today') + '</button>' +
         '<button class="toolbtn actiontool" data-action="open-add-exercise"><i data-lucide="search"></i>Add exercise</button>' +
+        '<button class="toolbtn actiontool" data-action="open-voice-log"><i data-lucide="mic"></i>Quick log</button>' +
       '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
       cards +
@@ -842,6 +1033,8 @@
     const setsWeek = mySets.filter(s => String(s.Date) >= ws).length;
     const kmWeek = myRuns.filter(r => String(r.Date) >= ws).reduce((a, r) => a + Number(r.Distance_km || 0), 0);
     const workoutsWeek = new Set(mySets.filter(s => String(s.Date) >= ws).map(s => s.Date)).size;
+    const statRows = profileStatsFor(me);
+    const latestStats = statRows[0] || {};
 
     /* streak: consecutive days ending today/yesterday with any activity */
     const activeDays = new Set(mySets.map(s => String(s.Date).slice(0, 10)).concat(myRuns.map(r => String(r.Date).slice(0, 10))));
@@ -879,6 +1072,12 @@
         '<div class="stat"><div class="stat-num">' + kmWeek.toFixed(1) + '<small> km</small></div><div class="stat-label">distance this week</div></div>' +
         '<div class="stat"><div class="stat-num">' + streak + '<small> day' + (streak === 1 ? '' : 's') + '</small></div><div class="stat-label">streak</div></div>' +
       '</div>' +
+      (latestStats.StatID ? '<div class="section-label">Profile stats</div>' +
+        '<div class="card"><div class="kv"><span class="k">Latest</span><span class="v">' + esc(shortDate(latestStats.Date)) + '</span></div>' +
+        '<div class="kv"><span class="k">Height</span><span class="v">' + esc(latestStats.Height_in ? latestStats.Height_in + ' in' : 'not set') + '</span></div>' +
+        '<div class="kv"><span class="k">Weight</span><span class="v">' + esc(latestStats.BodyWeight_lb ? latestStats.BodyWeight_lb + ' lb' : 'not set') + '</span></div>' +
+        '<div class="kv"><span class="k">Rest HR</span><span class="v">' + esc(latestStats.RestingHR_bpm ? latestStats.RestingHR_bpm + ' bpm' : 'not set') + '</span></div>' +
+        (statRows.length > 1 ? '<div class="resultcount mt8">' + statRows.length + ' updates saved</div>' : '') + '</div>' : '') +
       '<div class="section-label">This week’s challenges</div>' +
       renderChallenges(mySets, myRuns, ws) +
       '<div class="section-label">Push-up ladder</div>' +
@@ -1008,6 +1207,101 @@
     if (input) input.focus();
   }
 
+  function spokenNumberText(text) {
+    const words = {
+      one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+      eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+      eighteen: 18, nineteen: 19, twenty: 20,
+    };
+    return String(text || '').toLowerCase().replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g, m => words[m]);
+  }
+
+  function bestExerciseMatch(text) {
+    const phrase = spokenNumberText(text).replace(/[^a-z0-9 ]+/g, ' ');
+    const tokens = new Set(phrase.split(/\s+/).filter(t => t.length > 2 && !['reps', 'rep', 'pounds', 'pound', 'lbs', 'sets', 'set'].includes(t)));
+    let best = null, bestScore = 0;
+    state.exercises.forEach(e => {
+      const name = String(e.ExerciseName || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ');
+      const parts = name.split(/\s+/).filter(t => t.length > 2);
+      const score = parts.reduce((n, t) => n + (tokens.has(t) ? 1 : 0), 0);
+      if (score > bestScore && score >= Math.min(2, parts.length)) { best = e; bestScore = score; }
+    });
+    return best;
+  }
+
+  function parseVoiceLog(text) {
+    const clean = spokenNumberText(text);
+    const nums = (clean.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+    const weightMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:lb|lbs|pound|pounds)/i) || clean.match(/(?:at|with)\s*(\d+(?:\.\d+)?)/i);
+    const repsMatch = clean.match(/(\d+)\s*(?:rep|reps)/i);
+    const ex = bestExerciseMatch(clean);
+    return {
+      raw: text,
+      exercise: ex,
+      weight: weightMatch ? Number(weightMatch[1]) : '',
+      reps: repsMatch ? Number(repsMatch[1]) : (nums.length ? nums[nums.length - 1] : ''),
+    };
+  }
+
+  function voicePreviewHtml(draft) {
+    const d = draft || parseVoiceLog((($('#voiceText') || {}).value || ''));
+    return '<div class="kv"><span class="k">Exercise</span><span class="v">' + esc(d.exercise ? d.exercise.ExerciseName : 'No match yet') + '</span></div>' +
+      '<div class="kv"><span class="k">Weight</span><span class="v">' + esc(d.weight ? d.weight + ' lb' : 'not found') + '</span></div>' +
+      '<div class="kv"><span class="k">Reps</span><span class="v">' + esc(d.reps || 'not found') + '</span></div>';
+  }
+
+  function openVoiceLog() {
+    state.voiceDraft = null;
+    const speechOk = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    openModal(
+      '<div class="sheet-title">Quick log</div>' +
+      '<div class="sheet-sub">Say or type something like "bench press 135 eight reps".</div>' +
+      '<label class="full"><span class="formlabel">Phrase</span><textarea id="voiceText" rows="3" placeholder="bench press 135 eight reps"></textarea></label>' +
+      '<div id="voicePreview" class="mt16">' + voicePreviewHtml(null) + '</div>' +
+      '<button class="bigbtn mt16" data-action="listen-voice"' + (speechOk ? '' : ' disabled') + '><i data-lucide="mic"></i>' + (speechOk ? 'Listen' : 'Mic not supported') + '</button>' +
+      '<button class="bigbtn ghost" data-action="save-voice-log"><i data-lucide="check"></i>Save quick log</button>'
+    );
+    const input = $('#voiceText'); if (input) input.focus();
+  }
+
+  function startVoiceInput() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { toast('Voice recognition is not available here. Type it instead.', 'mic-off', true); return; }
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (ev) => {
+      const text = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
+      if ($('#voiceText')) $('#voiceText').value = text;
+      state.voiceDraft = parseVoiceLog(text);
+      const preview = $('#voicePreview'); if (preview) preview.innerHTML = voicePreviewHtml(state.voiceDraft);
+      lucide.createIcons({ nodes: [$('#modalSheet')] });
+    };
+    rec.onerror = () => toast('Could not hear that. Typing works too.', 'mic-off', true);
+    rec.start();
+    toast('Listening...', 'mic');
+  }
+
+  function saveVoiceLog() {
+    const phrase = (($('#voiceText') || {}).value || '').trim();
+    const draft = parseVoiceLog(phrase);
+    if (!draft.exercise) { toast('I could not match an exercise. Try a clearer exercise name.', 'circle-alert', true); return; }
+    if (!draft.reps) { toast('Add reps, like "eight reps".', 'circle-alert', true); return; }
+    const rec = {
+      LogID: uid('SET'), UserName: currentUser(), Date: todayStr(),
+      ExerciseID: draft.exercise.ExerciseID, ExerciseName: draft.exercise.ExerciseName,
+      SetNumber: '', TargetRepsOrTime: '', ActualReps: draft.reps,
+      Weight_lb: draft.weight || '', RPE_1_10: '', Pain_0_10: 0,
+      Completed: true, Notes: 'Quick log: ' + phrase, UpdatedAt: new Date().toISOString(),
+    };
+    const logs = lsGet('ef_setlogs', []); logs.push(rec); lsSet('ef_setlogs', logs);
+    post('appendExerciseLog', rec).then(() => updateSyncBadge());
+    closeModal();
+    toast('Quick logged: ' + draft.exercise.ExerciseName + '.', 'mic');
+    render();
+  }
+
   function openFinish() {
     const wid = state.workoutId;
     openModal(
@@ -1027,6 +1321,7 @@
 
   function openSettings() {
     const q = queue().length;
+    const latestStats = profileStatsFor(currentUser())[0] || {};
     const profileOptions = state.users.map(u =>
       '<option value="' + esc(u.UserName) + '"' + (u.UserName === currentUser() ? ' selected' : '') + '>' + esc(u.DisplayName || u.UserName) + '</option>'
     ).join('');
@@ -1043,6 +1338,21 @@
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Apps Script web app URL</span><input id="setScript" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(CFG.scriptUrl) + '"></label>' +
       '<div class="kv mt16" style="border-bottom:none;align-items:center;margin-top:10px"><span class="k">Back-safe</span>' +
         '<span class="v"><button class="chip' + (CFG.backSafe ? ' active' : '') + '" data-action="toggle-backsafe">' + (CFG.backSafe ? 'Hiding red-flag exercises' : 'Showing everything') + '</button></span></div>' +
+      '<div class="chiprow" style="margin:6px 0 0">' +
+        '<button class="chip' + (CFG.timerSound ? ' active' : '') + '" data-action="toggle-setting" data-key="timerSound"><i data-lucide="volume-2"></i>Sound</button>' +
+        '<button class="chip' + (CFG.timerVibrate ? ' active' : '') + '" data-action="toggle-setting" data-key="timerVibrate"><i data-lucide="smartphone"></i>Haptics</button>' +
+        '<button class="chip' + (CFG.motionCoach ? ' active' : '') + '" data-action="toggle-setting" data-key="motionCoach"><i data-lucide="activity"></i>Motion</button>' +
+      '</div>' +
+      '<div class="divider"></div>' +
+      '<div class="sheet-sub" style="margin-bottom:10px">Profile stats for ' + esc(displayNameFor(currentUser())) + '</div>' +
+      '<div class="formgrid">' +
+        '<label><span class="formlabel">Height in</span><input id="statHeight" type="number" inputmode="decimal" step="0.25" value="' + esc(latestStats.Height_in || '') + '"></label>' +
+        '<label><span class="formlabel">Weight lb</span><input id="statWeight" type="number" inputmode="decimal" step="0.1" value="' + esc(latestStats.BodyWeight_lb || '') + '"></label>' +
+        '<label><span class="formlabel">Rest HR</span><input id="statHr" type="number" inputmode="numeric" value="' + esc(latestStats.RestingHR_bpm || '') + '"></label>' +
+        '<label><span class="formlabel">Date</span><input id="statDate" type="date" value="' + esc(todayStr()) + '"></label>' +
+        '<label class="full"><span class="formlabel">Stats note</span><input id="statNotes" type="text" placeholder="Optional" value=""></label>' +
+      '</div>' +
+      '<button class="bigbtn subtle mt16" data-action="save-profile-stats"><i data-lucide="line-chart"></i>Save stats update</button>' +
       '<button class="bigbtn mt16" data-action="save-settings"><i data-lucide="save"></i>Save settings</button>' +
       '<button class="bigbtn ghost" data-action="sync-now"><i data-lucide="refresh-cw"></i>Sync now' + (q ? ' (' + q + ' queued)' : '') + '</button>' +
       '<button class="bigbtn subtle" data-action="export-data"><i data-lucide="download"></i>Export backup</button>' +
@@ -1151,9 +1461,29 @@
     render();
   }
 
+  function saveProfileStats() {
+    const rec = {
+      StatID: uid('STAT'), UserName: currentUser(), Date: ($('#statDate') || {}).value || todayStr(),
+      Height_in: ($('#statHeight') || {}).value || '',
+      BodyWeight_lb: ($('#statWeight') || {}).value || '',
+      RestingHR_bpm: ($('#statHr') || {}).value || '',
+      Notes: ($('#statNotes') || {}).value || '',
+      UpdatedAt: new Date().toISOString(),
+    };
+    if (!rec.Height_in && !rec.BodyWeight_lb && !rec.RestingHR_bpm && !rec.Notes) {
+      toast('Add at least one stat first.', 'circle-alert', true);
+      return;
+    }
+    const logs = lsGet('ef_profile_stats', []); logs.push(rec); lsSet('ef_profile_stats', logs);
+    post('appendProfileStats', rec).then(() => updateSyncBadge());
+    toast('Profile stats saved.', 'line-chart');
+    closeModal();
+    render();
+  }
+
   function exportData() {
     const data = {};
-    ['ef_settings', 'ef_setlogs', 'ef_runlogs', 'ef_journal', 'ef_queue'].forEach(k => { data[k] = lsGet(k, null); });
+    ['ef_settings', 'ef_setlogs', 'ef_runlogs', 'ef_journal', 'ef_profile_stats', 'ef_queue'].forEach(k => { data[k] = lsGet(k, null); });
     Object.keys(localStorage).forEach(k => { if (k.startsWith('ef_session_')) data[k] = lsGet(k, null); });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -1210,6 +1540,7 @@
       render();
     }
     else if (a === 'open-add-exercise') { openAddExercise(); }
+    else if (a === 'open-voice-log') { openVoiceLog(); }
     else if (a === 'add-routine-exercise') {
       if (addExerciseToRoutine(btn.dataset.id)) {
         closeModal();
@@ -1240,7 +1571,7 @@
         logSet(exId, i, row);
         const rest = Number((row && row.RestSeconds) || 60);
         if (rest > 0) startRest(rest);
-        if (navigator.vibrate) navigator.vibrate(30);
+        vibrate(30);
       } else {
         sess.sets[exId][i].done = false;
         setSession(wid, sess);
@@ -1274,6 +1605,7 @@
     }
 
     else if (a === 'toggle-details') { const el = $('#det-' + btn.dataset.ex); el.hidden = !el.hidden; }
+    else if (a === 'motion-set') { startMotionSet(btn.dataset.ex, btn.dataset.wd); }
     else if (a === 'rest') { startRest(Number(btn.dataset.sec) || 60); }
     else if (a === 'walk-timer') { startRest((Number(btn.dataset.min) || 20) * 60, 'walk'); toast('Walk timer running — enjoy it out there.', 'footprints'); }
     else if (a === 'finish') { openFinish(); }
@@ -1303,6 +1635,8 @@
     else if (a === 'save-run') { saveRun(); }
     else if (a === 'save-day-note') { saveDayNote(); }
     else if (a === 'save-journal') { saveDayNote(); }
+    else if (a === 'listen-voice') { startVoiceInput(); }
+    else if (a === 'save-voice-log') { saveVoiceLog(); }
     else if (a === 'close-modal') { closeModal(); }
 
     else if (a === 'toggle-backsafe') {
@@ -1310,8 +1644,18 @@
       btn.classList.toggle('active', CFG.backSafe);
       btn.textContent = CFG.backSafe ? 'Hiding red-flag exercises' : 'Showing everything';
     }
+    else if (a === 'toggle-setting') {
+      const key = btn.dataset.key;
+      if (key && Object.prototype.hasOwnProperty.call(CFG, key)) {
+        const patch = {}; patch[key] = !CFG[key];
+        saveSettings(patch);
+        btn.classList.toggle('active', !!CFG[key]);
+        toast((CFG[key] ? 'Enabled ' : 'Disabled ') + key.replace(/([A-Z])/g, ' $1').toLowerCase() + '.', 'settings-2');
+      }
+    }
     else if (a === 'open-add-profile') { openAddProfile(); }
     else if (a === 'save-new-profile') { saveNewProfile(); }
+    else if (a === 'save-profile-stats') { saveProfileStats(); }
     else if (a === 'save-settings') {
       saveSettings({ user: $('#setUser').value.trim() || 'Azhar', sheetId: $('#setSheet').value.trim(), scriptUrl: $('#setScript').value.trim() });
       state.workoutId = null;
@@ -1358,6 +1702,14 @@
         }
       }, 180);
     }
+    if (ev.target.id === 'voiceText') {
+      clearTimeout(state._voiceT);
+      state._voiceT = setTimeout(() => {
+        state.voiceDraft = parseVoiceLog(ev.target.value);
+        const preview = $('#voicePreview');
+        if (preview) preview.innerHTML = voicePreviewHtml(state.voiceDraft);
+      }, 120);
+    }
     if (ev.target.id === 'runDist' || ev.target.id === 'runMin') {
       const dist = Number($('#runDist').value), mins = Number($('#runMin').value);
       if (dist > 0 && mins > 0) {
@@ -1385,6 +1737,8 @@
   $('#syncBtn').addEventListener('click', () => fullSync(true));
   $('#restSkip').addEventListener('click', stopRest);
   $('#restAdd').addEventListener('click', () => { state.restEnd += 15000; tickRest(); });
+  $('#motionFinish').addEventListener('click', finishMotionSet);
+  $('#motionCancel').addEventListener('click', () => stopMotionSet(true));
 
   window.addEventListener('online', () => fullSync(false));
   window.addEventListener('pagehide', beaconQueue);

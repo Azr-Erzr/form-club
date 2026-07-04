@@ -21,6 +21,7 @@ var LOG_SHEETS = {
   appendUser: 'Users',
   appendWorkout: 'Workouts',
   appendWorkoutDay: 'Workout_Days',
+  appendProfileStats: 'Profile_Stats',
 };
 
 var MONTHLY_LOG_ACTIONS = {
@@ -45,6 +46,7 @@ var HEADERS = {
   Journal: ['EntryID', 'UserName', 'Date', 'Mood', 'Energy_1_10', 'SleepHours', 'BackPain_0_10',
             'BodyWeight_lb', 'CaloriesEstimate', 'ProteinEstimate_g', 'Journal', 'UpdatedAt'],
   Users: ['UserName', 'DisplayName', 'Goal', 'TrainingLocation', 'ExperienceLevel', 'Active'],
+  Profile_Stats: ['StatID', 'UserName', 'Date', 'Height_in', 'BodyWeight_lb', 'RestingHR_bpm', 'Notes', 'UpdatedAt'],
 };
 
 function setupSheet() {
@@ -127,7 +129,8 @@ function doPost(e) {
         : (body.payload.EntryID ? 'EntryID'
         : (body.payload.WorkoutDayID ? 'WorkoutDayID'
         : (body.payload.WorkoutID ? 'WorkoutID'
-        : (body.payload.UserName ? 'UserName' : ''))));
+        : (body.payload.StatID ? 'StatID'
+        : (body.payload.UserName ? 'UserName' : '')))));
       var idValue = idHeader ? String(body.payload[idHeader]) : '';
       var idCol = idHeader ? headers.indexOf(idHeader) + 1 : 0;
       if (idValue && idCol > 0) {
@@ -223,6 +226,7 @@ function readLogs(params) {
     runs: readRecentRows(ss, 'Run_Log', since),
     sets: readRecentRows(ss, 'Exercise_Log', since),
     journal: readRecentRows(ss, 'Journal', since),
+    profileStats: readRecentRows(ss, 'Profile_Stats', since),
   };
 }
 

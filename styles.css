@@ -173,6 +173,7 @@ select { background-image: none; }
 }
 .chip.active { border-color: var(--champagne); color: var(--champagne); background: var(--champagne-soft); }
 .chip .sug { font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.75; margin-left: 6px; }
+.chip svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
 
 /* ---------- flags ---------- */
 .flag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
@@ -215,9 +216,9 @@ select { background-image: none; }
 .setdone svg { width: 19px; height: 19px; }
 .setdone.done { background: var(--champagne-soft); border-color: var(--champagne); color: var(--champagne); }
 
-.excard-tools { display: flex; gap: 2px; padding: 8px 10px 12px; border-top: 1px solid var(--hairline-soft); margin-top: 10px; }
+.excard-tools { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 12px; border-top: 1px solid var(--hairline-soft); margin-top: 10px; }
 .toolbtn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+  flex: 1 1 30%; min-width: 88px; display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 10px 4px; color: var(--taupe); font-size: 0.76rem; letter-spacing: 0.06em;
   border-radius: 8px; font-weight: 400;
 }
@@ -339,6 +340,19 @@ th.num { text-align: right; }
   color: var(--taupe); font-size: 0.78rem;
 }
 .restbar-skip { color: var(--champagne); border-color: var(--hairline); }
+
+.motionbar {
+  position: fixed; bottom: calc(var(--tabbar-h) + 76px); left: 50%; transform: translateX(-50%);
+  width: calc(100% - var(--pad-left) - var(--pad-right)); max-width: 456px; z-index: 41;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--walnut-2); border: 1px solid rgba(138, 155, 110, 0.45);
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+}
+.motionbar svg { width: 18px; height: 18px; color: var(--sage); flex: 0 0 auto; }
+.motionbar-body { flex: 1; min-width: 0; }
+.motionbar-main { font-family: var(--serif); font-size: 1.05rem; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.motionbar-sub { color: var(--taupe); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- tab bar ---------- */
 .tabbar {
