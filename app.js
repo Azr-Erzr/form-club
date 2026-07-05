@@ -162,6 +162,8 @@
     voiceDraft: null,
     voice: { listening: false, recognition: null },
     sync: { reading: false, writing: false, lastReadAt: 0, lastWriteAt: 0, lastCoreAt: 0, lastError: '' },
+    scheduleEdit: false,
+    scheduleDragId: '',
   };
 
   function currentUser() { return (CFG.user || 'Azhar').trim() || 'Azhar'; }
@@ -202,12 +204,32 @@
   function workoutOwner(w) {
     return String(w.UserName || w.Profile || w.Owner || w.OwnerUserName || '').trim();
   }
+  function workoutSortValue(w) {
+    const n = Number(w.SortOrder || w.ScheduleOrder || w.Order || 0);
+    return isFinite(n) && n > 0 ? n : 9999;
+  }
+  function scheduleOrderKey(name) { return 'ef_schedule_order_' + userKey(name || currentUser()); }
+  function profileOrder(name) { return lsGet(scheduleOrderKey(name || currentUser()), []); }
+  function setProfileOrder(ids, name) { lsSet(scheduleOrderKey(name || currentUser()), ids.filter(Boolean)); }
   function profileWorkouts() {
     const me = currentUser();
+    const order = profileOrder(me);
+    const orderIndex = new Map(order.map((id, i) => [id, i]));
+    const seen = new Set();
     return state.workouts.filter(w => {
+      if (String(w.Active || 'Yes').toLowerCase() === 'no') return false;
       const owner = workoutOwner(w);
       const shared = ['club', 'shared', 'all'].includes(owner.toLowerCase());
       return shared || owner === me || (!owner && me === 'Azhar');
+    }).filter(w => {
+      const id = String(w.WorkoutID || '');
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }).sort((a, b) => {
+      const ai = orderIndex.has(a.WorkoutID) ? orderIndex.get(a.WorkoutID) : workoutSortValue(a);
+      const bi = orderIndex.has(b.WorkoutID) ? orderIndex.get(b.WorkoutID) : workoutSortValue(b);
+      return ai - bi || String(a.WorkoutName || '').localeCompare(String(b.WorkoutName || ''));
     });
   }
   function updateProfileBadge() {
@@ -840,11 +862,73 @@
     post(action, row).then(() => updateSyncBadge());
   }
 
+  function saveWorkoutOrder(ids) {
+    const clean = ids.filter(Boolean);
+    setProfileOrder(clean);
+    clean.forEach((id, i) => {
+      const w = state.workouts.find(x => x.WorkoutID === id);
+      if (w) w.SortOrder = String(i + 1);
+    });
+    post('reorderWorkouts', {
+      UserName: currentUser(),
+      WorkoutIDs: clean.join('|'),
+      UpdatedAt: new Date().toISOString(),
+    }).then(() => updateSyncBadge());
+  }
+
+  function moveWorkoutInSchedule(dragId, targetId) {
+    if (!dragId || dragId === targetId) return false;
+    const ids = profileWorkouts().map(w => w.WorkoutID);
+    const from = ids.indexOf(dragId);
+    if (from < 0) return false;
+    ids.splice(from, 1);
+    const to = targetId ? ids.indexOf(targetId) : -1;
+    ids.splice(to >= 0 ? to : ids.length, 0, dragId);
+    saveWorkoutOrder(ids);
+    return true;
+  }
+
+  function removeWorkoutFromSchedule(id) {
+    const w = state.workouts.find(x => x.WorkoutID === id);
+    if (!w) return false;
+    w.Active = 'No';
+    state.days = state.days.filter(row => row.WorkoutID !== id);
+    saveWorkoutOrder(profileWorkouts().filter(x => x.WorkoutID !== id).map(x => x.WorkoutID));
+    post('deleteWorkout', { WorkoutID: id, UserName: currentUser(), UpdatedAt: new Date().toISOString() }).then(() => updateSyncBadge());
+    if (state.workoutId === id) {
+      const next = profileWorkouts()[0];
+      state.workoutId = next ? next.WorkoutID : null;
+    }
+    return true;
+  }
+
+  function createBlankWorkout(name, opts) {
+    const mine = profileWorkouts();
+    const rec = {
+      WorkoutID: uid('WO'),
+      WorkoutName: name || 'New routine',
+      Goal: (opts && opts.goal) || 'Custom',
+      Level: (opts && opts.level) || 'Any',
+      Location: (opts && opts.location) || 'Gym/Home',
+      EstimatedMinutes: (opts && opts.minutes) || '45',
+      Description: (opts && opts.description) || 'Profile-owned routine for ' + displayNameFor(currentUser()),
+      BackWarning: 'Use the pain rule: stop any movement that feels wrong.',
+      Active: 'Yes',
+      UserName: currentUser(),
+      SortOrder: String(mine.length + 1),
+    };
+    appendAndPost('appendWorkout', state.workouts, rec);
+    saveWorkoutOrder(mine.map(w => w.WorkoutID).concat(rec.WorkoutID));
+    state.workoutId = rec.WorkoutID;
+    return rec;
+  }
+
   function ensureTodayRoutine(seedWid) {
     const dayId = todayWorkoutId();
     let workout = state.workouts.find(w => w.WorkoutID === dayId);
     const seed = seedWid && seedWid !== dayId ? state.workouts.find(w => w.WorkoutID === seedWid) : null;
     if (!workout) {
+      const beforeOrder = profileWorkouts().map(w => w.WorkoutID);
       workout = {
         WorkoutID: dayId,
         WorkoutName: 'Today - ' + shortDate(todayStr()),
@@ -856,8 +940,10 @@
         BackWarning: (seed && seed.BackWarning) || 'Use the pain rule: stop any movement that feels wrong.',
         Active: 'Yes',
         UserName: currentUser(),
+        SortOrder: String(profileWorkouts().length + 1),
       };
       appendAndPost('appendWorkout', state.workouts, workout);
+      saveWorkoutOrder(beforeOrder.concat(workout.WorkoutID));
     }
     if (seed && !rowsForWorkout(dayId).length) {
       rowsForWorkout(seedWid).forEach((row, i) => {
@@ -959,6 +1045,31 @@
     return v === 'red' ? 'flag-red' : v === 'amber' || v === 'yellow' ? 'flag-amber' : 'flag-green';
   }
 
+  function scheduleSelectorHtml(mine, wid, sugg) {
+    const title = '<div class="schedule-head"><div><span class="section-label">Schedule</span>' +
+      '<div class="resultcount">Profile-owned routines for ' + esc(displayNameFor(currentUser())) + '</div></div>' +
+      '<button class="chip schedule-edit-toggle' + (state.scheduleEdit ? ' active' : '') + '" data-action="toggle-schedule-edit">' +
+        (state.scheduleEdit ? 'Done' : 'Edit') + '</button></div>';
+    if (!state.scheduleEdit) {
+      return title + '<div class="chiprow schedule-row">' + mine.map(w =>
+        '<button class="chip' + (w.WorkoutID === wid ? ' active' : '') + '" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
+        esc(w.WorkoutName) + (w.WorkoutID === sugg && w.WorkoutID !== wid ? '<span class="sug">suggested</span>' : '') + '</button>'
+      ).join('') + '</div>';
+    }
+    return title + '<div class="schedule-edit-list">' + mine.map((w, i) =>
+      '<div class="schedule-edit-item' + (w.WorkoutID === wid ? ' active' : '') + '" draggable="true" data-workout-id="' + esc(w.WorkoutID) + '">' +
+        '<button class="ios-delete" data-action="delete-workout" data-id="' + esc(w.WorkoutID) + '" aria-label="Delete ' + esc(w.WorkoutName) + '"><span></span></button>' +
+        '<button class="schedule-edit-main" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
+          '<span class="schedule-edit-name">' + esc(w.WorkoutName) + '</span>' +
+          '<span class="schedule-edit-meta">' + esc([w.Location, w.EstimatedMinutes && w.EstimatedMinutes + ' min'].filter(Boolean).join(' - ') || 'Custom routine') + '</span>' +
+        '</button>' +
+        '<button class="drag-handle" data-action="drag-workout" aria-label="Hold and drag ' + esc(w.WorkoutName) + '"><i data-lucide="grip-vertical"></i></button>' +
+      '</div>'
+    ).join('') +
+      '<button class="schedule-add-row" data-action="open-new-workout"><span class="ios-add"><i data-lucide="plus"></i></span><span>Add routine</span></button>' +
+    '</div>';
+  }
+
   function renderToday() {
     const mine = profileWorkouts();
     if (state.workoutId && !mine.some(w => w.WorkoutID === state.workoutId)) state.workoutId = null;
@@ -969,17 +1080,13 @@
     const sess = getSession(wid);
     const prep = getPrep();
 
-    const chips = mine.map(w =>
-      '<button class="chip' + (w.WorkoutID === wid ? ' active' : '') + '" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
-      esc(w.WorkoutName) + (w.WorkoutID === sugg ? '<span class="sug">today</span>' : '') + '</button>'
-    ).join('');
-
     if (!mine.length) {
       return '<div class="eyebrow">' + esc(displayNameFor(currentUser())) + '</div>' +
         '<h1 class="pagetitle">No workout plan yet</h1>' +
         '<p class="pagesub">This profile is a clean slate. Build today as you go, or create a reusable profile-owned routine from the exercises you add.</p>' +
         '<button class="bigbtn" data-action="create-today-routine"><i data-lucide="plus"></i>Create blank today</button>' +
-        '<button class="bigbtn subtle mt16" data-action="open-add-exercise"><i data-lucide="search"></i>Add first exercise</button>';
+        '<button class="bigbtn subtle mt16" data-action="open-add-exercise"><i data-lucide="search"></i>Add first exercise</button>' +
+        '<button class="bigbtn ghost mt16" data-action="open-new-workout"><i data-lucide="calendar-plus"></i>Create repeatable routine</button>';
     }
 
     let cards = '';
@@ -1072,7 +1179,7 @@
         (doneSets ? '<span class="excard-target">' + doneSets + ' / ' + planned + ' sets</span>' : '') + '</div>' +
       (doneSets ? '<div class="hairbar"><span style="width:' + pct + '%"></span></div>' : '') +
       '<p class="pagesub">' + esc(workout ? (workout.Description + ' · about ' + workout.EstimatedMinutes + ' min') : 'Pick a plan below.') + '</p>' +
-      '<div class="chiprow">' + chips + '</div>' +
+      scheduleSelectorHtml(mine, wid, sugg) +
       '<div class="actionrow">' +
         '<button class="toolbtn actiontool" data-action="customize-today"><i data-lucide="copy-plus"></i>' + (isTodayWorkout(wid) ? 'Today routine' : 'Customize today') + '</button>' +
         '<button class="toolbtn actiontool" data-action="add-warmup"><i data-lucide="sparkles"></i>' + (rowsForWorkout(wid).some(isWarmupRow) ? 'Remove warm-up' : 'Warm-up') + '</button>' +
@@ -1415,6 +1522,23 @@
       '<div id="exercisePicker">' + exercisePickerHtml(state.routine.q) + '</div>'
     );
     const input = $('#routineSearch');
+    if (input) input.focus();
+  }
+
+  function openNewWorkout() {
+    openModal(
+      '<div class="sheet-title">New routine</div>' +
+      '<div class="sheet-sub">Create a repeatable routine for ' + esc(displayNameFor(currentUser())) + ', then add exercises to it.</div>' +
+      '<div class="formgrid">' +
+        '<label class="full"><span class="formlabel">Routine name</span><input id="newWorkoutName" type="text" placeholder="Upper body day"></label>' +
+        '<label><span class="formlabel">Location</span><select id="newWorkoutLocation"><option>Gym</option><option>Home</option><option>Home + Gym</option></select></label>' +
+        '<label><span class="formlabel">Minutes</span><input id="newWorkoutMinutes" type="number" inputmode="numeric" value="45"></label>' +
+        '<label class="full"><span class="formlabel">Focus</span><input id="newWorkoutGoal" type="text" placeholder="Strength, machines, conditioning"></label>' +
+        '<label class="full"><span class="formlabel">Description</span><input id="newWorkoutDescription" type="text" placeholder="Optional note for this routine"></label>' +
+      '</div>' +
+      '<button class="bigbtn mt16" data-action="save-new-workout"><i data-lucide="calendar-plus"></i>Create routine</button>'
+    );
+    const input = $('#newWorkoutName');
     if (input) input.focus();
   }
 
@@ -1833,6 +1957,23 @@
     render();
   }
 
+  function saveNewWorkout() {
+    const name = (($('#newWorkoutName') || {}).value || '').trim();
+    if (!name) { toast('Routine name first.', 'circle-alert', true); return; }
+    const rec = createBlankWorkout(name, {
+      goal: (($('#newWorkoutGoal') || {}).value || '').trim(),
+      location: (($('#newWorkoutLocation') || {}).value || '').trim(),
+      minutes: (($('#newWorkoutMinutes') || {}).value || '').trim(),
+      description: (($('#newWorkoutDescription') || {}).value || '').trim(),
+    });
+    state.scheduleEdit = false;
+    closeModal();
+    toast('Routine created for ' + displayNameFor(currentUser()) + '.', 'calendar-plus');
+    render();
+    setTimeout(openAddExercise, 180);
+    return rec;
+  }
+
   function exportData() {
     const data = {};
     ['ef_settings', 'ef_setlogs', 'ef_runlogs', 'ef_journal', 'ef_profile_stats', 'ef_queue'].forEach(k => { data[k] = lsGet(k, null); });
@@ -1886,6 +2027,14 @@
     const wid = state.workoutId;
 
     if (a === 'pick-workout') { state.workoutId = btn.dataset.id; render(); }
+    else if (a === 'toggle-schedule-edit') { state.scheduleEdit = !state.scheduleEdit; render(); }
+    else if (a === 'open-new-workout') { openNewWorkout(); }
+    else if (a === 'save-new-workout') { saveNewWorkout(); }
+    else if (a === 'delete-workout') {
+      const removed = removeWorkoutFromSchedule(btn.dataset.id);
+      toast(removed ? 'Routine removed from this schedule.' : 'Could not remove that routine.', removed ? 'minus-circle' : 'circle-alert', !removed);
+      render();
+    }
     else if (a === 'create-today-routine' || a === 'customize-today') {
       ensureTodayRoutine(state.workoutId);
       toast('Today\'s routine is ready for ' + displayNameFor(currentUser()) + '.', 'copy-plus');
@@ -2105,6 +2254,42 @@
       }
     }
     if (['toolTarget', 'toolBar', 'toolWeight', 'toolReps'].includes(ev.target.id)) updateToolsCalc();
+  });
+
+  document.addEventListener('dragstart', (ev) => {
+    const item = ev.target.closest('.schedule-edit-item');
+    if (!item) return;
+    state.scheduleDragId = item.dataset.workoutId || '';
+    item.classList.add('dragging');
+    if (ev.dataTransfer) {
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', state.scheduleDragId);
+    }
+  });
+
+  document.addEventListener('dragover', (ev) => {
+    const item = ev.target.closest('.schedule-edit-item, .schedule-add-row');
+    if (!item || !state.scheduleDragId) return;
+    ev.preventDefault();
+    $$('.schedule-edit-item.drop-target').forEach(el => el.classList.remove('drop-target'));
+    if (item.classList.contains('schedule-edit-item') && item.dataset.workoutId !== state.scheduleDragId) item.classList.add('drop-target');
+  });
+
+  document.addEventListener('drop', (ev) => {
+    const item = ev.target.closest('.schedule-edit-item, .schedule-add-row');
+    if (!item || !state.scheduleDragId) return;
+    ev.preventDefault();
+    const targetId = item.classList.contains('schedule-edit-item') ? item.dataset.workoutId : '';
+    if (moveWorkoutInSchedule(state.scheduleDragId, targetId)) {
+      toast('Schedule reordered.', 'grip-vertical');
+      render();
+    }
+    state.scheduleDragId = '';
+  });
+
+  document.addEventListener('dragend', () => {
+    state.scheduleDragId = '';
+    $$('.schedule-edit-item.dragging, .schedule-edit-item.drop-target').forEach(el => el.classList.remove('dragging', 'drop-target'));
   });
 
   /* modal scrim + effort/pain selection (delegated inside modal) */

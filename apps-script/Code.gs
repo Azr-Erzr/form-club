@@ -13,7 +13,7 @@
 
 var SHEET_ID = '1-yrjMnyAGWDDZNa4K9NlEACqOn4iTorBwKNSMGEb4-c';
 var REPO_RAW = 'https://raw.githubusercontent.com/Azr-Erzr/form-club/main/data/';
-var BACKEND_VERSION = 'form-backend-v3.1';
+var BACKEND_VERSION = 'form-backend-v3.2';
 
 var LOG_SHEETS = {
   appendRunLog: 'Run_Log',
@@ -105,7 +105,7 @@ function importCsv(ss, name, url) {
 
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action;
-  if (action === 'status') return json({ ok: true, version: BACKEND_VERSION, actions: Object.keys(LOG_SHEETS).concat(['deleteWorkoutDay', 'readLogs']) });
+  if (action === 'status') return json({ ok: true, version: BACKEND_VERSION, actions: Object.keys(LOG_SHEETS).concat(['deleteWorkoutDay', 'deleteWorkout', 'reorderWorkouts', 'readLogs']) });
   if (action === 'readLogs') return json(readLogs(e.parameter || {}));
   if (action === 'setupMonthlyLogTabs') {
     setupMonthlyLogTabs();
@@ -118,6 +118,8 @@ function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     if (body.action === 'deleteWorkoutDay') return json(deleteById('Workout_Days', 'WorkoutDayID', body.payload && body.payload.WorkoutDayID));
+    if (body.action === 'deleteWorkout') return json(markWorkoutInactive(body.payload && body.payload.WorkoutID));
+    if (body.action === 'reorderWorkouts') return json(reorderWorkouts(body.payload || {}));
     var sheetName = LOG_SHEETS[body.action];
     if (!sheetName) return json({ ok: false, error: 'Unknown action: ' + body.action });
 
@@ -127,6 +129,7 @@ function doPost(e) {
       var ss = SpreadsheetApp.openById(SHEET_ID);
       var sh = sheetForWrite(ss, body.action, body.payload || {});
       if (!sh) return json({ ok: false, error: 'Missing tab: ' + sheetName + '. Run setupSheet().' });
+      if (body.action === 'appendWorkout') ensureColumn(sh, 'SortOrder');
       var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
       var idHeader = body.payload.LogID ? 'LogID'
         : (body.payload.EntryID ? 'EntryID'
@@ -151,6 +154,70 @@ function doPost(e) {
     return json({ ok: true });
   } catch (err) {
     return json({ ok: false, error: String(err) });
+  }
+}
+
+function ensureColumn(sh, header) {
+  var lastCol = Math.max(1, sh.getLastColumn());
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var idx = headers.indexOf(header) + 1;
+  if (idx > 0) return idx;
+  sh.getRange(1, lastCol + 1).setValue(header).setFontWeight('bold');
+  return lastCol + 1;
+}
+
+function markWorkoutInactive(workoutId) {
+  if (!workoutId) return { ok: false, error: 'Missing WorkoutID' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sh = ss.getSheetByName('Workouts');
+    if (!sh) return { ok: false, error: 'Missing tab: Workouts. Run setupSheet().' };
+    var idCol = ensureColumn(sh, 'WorkoutID');
+    var activeCol = ensureColumn(sh, 'Active');
+    var last = sh.getLastRow();
+    if (last <= 1) return { ok: true, updated: false };
+    var values = sh.getRange(2, idCol, last - 1, 1).getValues();
+    for (var i = values.length - 1; i >= 0; i--) {
+      if (String(values[i][0]) === String(workoutId)) {
+        sh.getRange(i + 2, activeCol).setValue('No');
+        return { ok: true, updated: true };
+      }
+    }
+    return { ok: true, updated: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reorderWorkouts(payload) {
+  var ids = String(payload.WorkoutIDs || '').split('|').filter(Boolean);
+  if (!ids.length) return { ok: false, error: 'Missing WorkoutIDs' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sh = ss.getSheetByName('Workouts');
+    if (!sh) return { ok: false, error: 'Missing tab: Workouts. Run setupSheet().' };
+    var idCol = ensureColumn(sh, 'WorkoutID');
+    var orderCol = ensureColumn(sh, 'SortOrder');
+    var order = {};
+    ids.forEach(function (id, i) { order[id] = i + 1; });
+    var last = sh.getLastRow();
+    if (last <= 1) return { ok: true, updated: 0 };
+    var values = sh.getRange(2, idCol, last - 1, 1).getValues();
+    var updated = 0;
+    values.forEach(function (row, i) {
+      var id = String(row[0] || '');
+      if (order[id]) {
+        sh.getRange(i + 2, orderCol).setValue(order[id]);
+        updated++;
+      }
+    });
+    return { ok: true, updated: updated };
+  } finally {
+    lock.releaseLock();
   }
 }
 

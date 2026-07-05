@@ -1,7 +1,7 @@
 /* Form — offline shell */
-const VERSION = 'form-v15';
+const VERSION = 'form-v16';
 const SHELL = [
-  './', 'index.html', 'styles.css?v=15', 'app.js?v=15', 'config.js?v=15', 'manifest.webmanifest?v=15',
+  './', 'index.html', 'styles.css?v=16', 'app.js?v=16', 'config.js?v=16', 'manifest.webmanifest?v=16',
   'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'data/exercises.csv', 'data/workouts.csv', 'data/workout_days.csv',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

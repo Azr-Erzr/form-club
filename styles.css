@@ -212,6 +212,79 @@ select { background-image: none; }
 .chip .sug { font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.75; margin-left: 6px; }
 .chip svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
 
+/* ---------- schedule editor ---------- */
+.schedule-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin: 4px 0 8px;
+}
+.schedule-head .section-label { margin: 0 0 3px; }
+.schedule-edit-toggle { flex: 0 0 auto; }
+.schedule-row { margin-bottom: 12px; }
+.schedule-edit-list {
+  display: grid; gap: 8px; margin: 0 0 14px;
+}
+.schedule-edit-item,
+.schedule-add-row {
+  min-height: 54px; width: 100%;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, rgba(242,236,223,0.07), rgba(242,236,223,0.025)),
+    rgba(29,27,24,0.72);
+  display: grid; grid-template-columns: 38px 1fr 42px; gap: 6px;
+  align-items: center; padding: 7px 8px;
+  box-shadow: inset 0 1px 0 rgba(242,236,223,0.05);
+}
+.schedule-edit-item.active {
+  border-color: rgba(198,161,91,0.46);
+  background:
+    linear-gradient(90deg, rgba(198,161,91,0.12), transparent 60%),
+    rgba(29,27,24,0.82);
+}
+.schedule-edit-item.dragging { opacity: 0.48; }
+.schedule-edit-item.drop-target {
+  border-color: rgba(168,184,137,0.68);
+  box-shadow: inset 0 0 0 1px rgba(168,184,137,0.24);
+}
+.ios-delete,
+.ios-add {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+}
+.ios-delete {
+  background: var(--terracotta);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 6px 14px rgba(192,96,77,0.22);
+}
+.ios-delete span {
+  width: 13px; height: 3px; border-radius: 2px; background: #fff7ef;
+}
+.schedule-edit-main {
+  min-width: 0; text-align: left; display: grid; gap: 2px;
+}
+.schedule-edit-name {
+  color: var(--ivory); font-family: var(--serif); font-size: 1.02rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.schedule-edit-meta {
+  color: var(--taupe); font-size: 0.72rem; letter-spacing: 0.06em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.drag-handle {
+  min-height: 40px; color: var(--taupe-dim);
+  touch-action: none; cursor: grab;
+}
+.drag-handle:active { cursor: grabbing; color: var(--champagne); }
+.drag-handle svg { width: 22px; height: 22px; }
+.schedule-add-row {
+  grid-template-columns: 38px 1fr;
+  color: var(--ivory); font-weight: 600; text-align: left;
+}
+.ios-add {
+  color: #f9fff0; background: #4f8d4f;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 14px rgba(79,141,79,0.22);
+}
+.ios-add svg { width: 19px; height: 19px; stroke-width: 3; }
+
 /* ---------- flags ---------- */
 .flag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .flag-green { background: var(--sage); }
