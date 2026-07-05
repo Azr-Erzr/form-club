@@ -275,43 +275,6 @@ select { background-image: none; }
 .warmup-list { margin-top: 12px; }
 .warmup-list .excard:last-child { margin-bottom: 0; }
 
-.anatomy-card {
-  padding-bottom: 16px;
-  background:
-    linear-gradient(160deg, rgba(138,155,110,0.12), rgba(167,110,95,0.055), rgba(29,27,24,0.96)),
-    var(--espresso);
-}
-.anatomy-wrap {
-  display: grid; place-items: center;
-  min-height: 178px; border: 1px solid var(--hairline-soft);
-  border-radius: 12px; background: rgba(11, 10, 9, 0.18);
-  overflow: hidden;
-}
-.anatomy-svg { width: 100%; max-width: 320px; height: auto; display: block; }
-.anatomy-svg .bodyline {
-  fill: none; stroke: rgba(242,236,223,0.38); stroke-width: 2.2;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.anatomy-svg .muscles path {
-  fill: var(--sage); opacity: calc(var(--heat) * 0.82);
-  stroke: rgba(242,236,223,0.18); stroke-width: 0.8;
-  transition: opacity 0.25s ease, fill 0.25s ease;
-}
-.anatomy-svg text {
-  fill: var(--taupe-dim); font-size: 9px; letter-spacing: 0.18em;
-  text-anchor: middle; text-transform: uppercase;
-}
-.musclechips {
-  display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px;
-}
-.musclechip {
-  border: 1px solid rgba(138,155,110,0.42);
-  background: rgba(138,155,110,0.12);
-  color: var(--ivory); padding: 7px 10px; border-radius: 999px;
-  font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
-  opacity: calc(0.72 + var(--heat) * 0.28);
-}
-
 /* ---------- exercise card (Today) ---------- */
 .excard { padding: 0; overflow: hidden; }
 .excard {
