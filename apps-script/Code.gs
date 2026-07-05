@@ -13,7 +13,7 @@
 
 var SHEET_ID = '1-yrjMnyAGWDDZNa4K9NlEACqOn4iTorBwKNSMGEb4-c';
 var REPO_RAW = 'https://raw.githubusercontent.com/Azr-Erzr/form-club/main/data/';
-var BACKEND_VERSION = 'form-backend-v3';
+var BACKEND_VERSION = 'form-backend-v3.1';
 
 var LOG_SHEETS = {
   appendRunLog: 'Run_Log',
@@ -286,14 +286,15 @@ function readRecentRows(ss, base, since) {
 }
 
 function recentMonthlyNames(base, since) {
+  // Compare month indices, not Date objects — comparing Dates dropped the
+  // current month whenever the clock time was before the fixed 12:00Z start.
   var out = [];
-  var start = new Date(since + 'T12:00:00Z');
-  var end = new Date();
-  start.setUTCDate(1);
-  end.setUTCDate(1);
-  while (start <= end) {
-    out.push(monthlySheetName(base, start));
-    start.setUTCMonth(start.getUTCMonth() + 1);
+  var s = new Date(since + 'T12:00:00Z');
+  var now = new Date();
+  var cur = s.getUTCFullYear() * 12 + s.getUTCMonth();
+  var last = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  for (; cur <= last; cur++) {
+    out.push(base + '_' + Math.floor(cur / 12) + '_' + String((cur % 12) + 1).padStart(2, '0'));
   }
   return out;
 }
