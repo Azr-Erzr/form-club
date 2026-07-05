@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Forme — mockup</title>
+<meta name="theme-color" content="#F2EDDF">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   FORME — movement, refined · design-direction mockup
+   Pantone card × glazed zellige × mahjong jade × ceramic keycap
+   All texture is pure CSS/SVG. No image assets.
+   ============================================================ */
+
+:root {
+  /* paper + ink */
+  --paper: #F2EDDF;
+  --paper-deep: #EAE3D1;
+  --card: #FBF8EF;
+  --card-warm: #F7F1E2;
+  --ink: #26281F;
+  --ink-soft: #4C5245;
+  --ink-mute: #8A8B7A;
+
+  /* the collection */
+  --jade-950: #0F3323;
+  --jade-800: #17472F;
+  --jade-600: #24634212;
+  --jade: #1E5A3D;
+  --jade-hi: #3E8A61;
+  --jade-glaze: #A9C9B2;
+  --sage: #B4C29C;
+  --sage-deep: #7E9169;
+  --terra: #BC5F49;
+  --terra-deep: #9E4A36;
+  --peach: #F0BA9F;
+  --peach-soft: #F6D9C4;
+  --pool: #8FBDC4;
+  --pool-deep: #4F7E86;
+  --slate: #56789B;
+  --honey: #C9964B;
+  --brass: #A9803F;
+  --lilac: #C9BCD9;
+  --wood: #8A6845;
+  --wood-deep: #64492E;
+
+  --hairline: rgba(38, 40, 31, 0.1);
+  --serif: 'Fraunces', Georgia, serif;
+  --sans: 'Outfit', -apple-system, sans-serif;
+
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+
+  --shadow-card: 0 1px 2px rgba(56, 47, 30, 0.08), 0 10px 24px -10px rgba(56, 47, 30, 0.22);
+  --shadow-pop: 0 2px 4px rgba(35, 50, 40, 0.25), 0 12px 22px -8px rgba(35, 50, 40, 0.45);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: var(--sans);
+  color: var(--ink);
+  background:
+    var(--noise),
+    repeating-linear-gradient(90deg, rgba(38,40,31,0.028) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(0deg, rgba(38,40,31,0.028) 0 1px, transparent 1px 44px),
+    linear-gradient(180deg, #F5F0E3, var(--paper) 240px);
+  background-attachment: fixed;
+  line-height: 1.45;
+  font-weight: 400;
+}
+
+#page { max-width: 480px; margin: 0 auto; padding: 18px 18px 130px; }
+
+/* ---------- glazed ceramic base (the keycap feel) ---------- */
+.glaze {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.glaze::before {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(120% 70% at 18% 0%, rgba(255,255,255,0.55), rgba(255,255,255,0.12) 42%, transparent 60%),
+    radial-gradient(90% 50% at 85% 108%, rgba(0,0,0,0.18), transparent 55%);
+  mix-blend-mode: soft-light;
+}
+.glaze::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: var(--noise); opacity: 0.35; mix-blend-mode: overlay;
+}
+
+/* marble veining, layered under .glaze highlights */
+.marble {
+  background-image:
+    repeating-linear-gradient(104deg, transparent 0 34px, rgba(255,255,255,0.14) 34px 35.5px, transparent 35.5px 71px),
+    repeating-linear-gradient(76deg, transparent 0 55px, rgba(255,255,255,0.10) 55px 56px, transparent 56px 97px),
+    repeating-linear-gradient(99deg, transparent 0 21px, rgba(10, 30, 20, 0.12) 21px 22px, transparent 22px 60px);
+}
+
+/* wood grain rail */
+.wood {
+  background:
+    repeating-linear-gradient(92deg, rgba(50, 33, 16, 0.22) 0 2px, transparent 2px 9px, rgba(255, 230, 190, 0.09) 9px 11px, transparent 11px 26px),
+    linear-gradient(180deg, #96754F, var(--wood) 45%, var(--wood-deep));
+}
+
+/* ---------- header ---------- */
+header { display: flex; align-items: flex-start; justify-content: space-between; padding: 6px 0 22px; }
+.brand { display: flex; gap: 12px; align-items: flex-start; }
+.wordmark { font-family: var(--serif); font-size: 2.35rem; font-weight: 700; line-height: 0.9; letter-spacing: -0.01em; }
+.brand-sub { font-size: 0.6rem; letter-spacing: 0.34em; font-weight: 600; color: var(--terra); margin-top: 7px; }
+.logo-tiles { display: grid; grid-template-columns: 15px 15px; grid-auto-rows: 15px; gap: 3px; margin-top: 7px; }
+.logo-tiles span { border-radius: 4px; box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), inset 0 -2px 3px rgba(0,0,0,0.28), 0 1px 2px rgba(56,47,30,0.3); }
+.logo-tiles span:nth-child(1) { background: linear-gradient(150deg, var(--jade-hi), var(--jade-800)); }
+.logo-tiles span:nth-child(2) { background: linear-gradient(150deg, #D9C08A, var(--honey)); }
+.logo-tiles span:nth-child(3) { background: linear-gradient(150deg, var(--peach), var(--terra)); }
+.logo-tiles span:nth-child(4) { background: linear-gradient(150deg, var(--pool), var(--pool-deep)); }
+
+.profile {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--card); border: 1px solid var(--hairline);
+  border-radius: 999px; padding: 7px 10px 7px 16px;
+  box-shadow: var(--shadow-card);
+}
+.profile .who { text-align: right; line-height: 1.15; }
+.profile .name { font-family: var(--serif); font-weight: 600; font-size: 0.95rem; }
+.profile .lvl { font-size: 0.56rem; letter-spacing: 0.22em; font-weight: 600; color: var(--ink-mute); }
+.avatar {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 600; color: #EAF3E9; font-size: 0.95rem;
+  background: radial-gradient(120% 100% at 25% 12%, var(--jade-hi), var(--jade-950) 78%);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.45), inset 0 -3px 5px rgba(0,0,0,0.4), 0 2px 4px rgba(20,50,35,0.4);
+}
+.profile svg { width: 15px; height: 15px; color: var(--ink-mute); }
+
+/* ---------- hero ---------- */
+.eyebrow { font-size: 0.64rem; letter-spacing: 0.3em; font-weight: 600; color: var(--terra); }
+.hero { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 11vw, 2.7rem); line-height: 0.98; letter-spacing: -0.015em; margin: 8px 0 10px; }
+.hero-sub { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 0.86rem; max-width: 250px; }
+.hero-sub .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: radial-gradient(circle at 32% 28%, var(--jade-hi), var(--jade-950)); box-shadow: 0 1px 2px rgba(20,50,35,0.5); }
+
+/* focus card = a PANTONE swatch card */
+.swatch-card {
+  flex: 0 0 114px; background: #FDFBF4; border-radius: 10px; padding: 8px 9px 9px;
+  box-shadow: var(--shadow-card); border: 1px solid rgba(38,40,31,0.06);
+  margin: 6px 4px 0 0; transform: rotate(1.2deg);
+}
+.swatch-block { height: 74px; border-radius: 5px; background: linear-gradient(165deg, #92A87D, var(--sage-deep) 70%); }
+.swatch-card .code { font-size: 0.56rem; letter-spacing: 0.06em; font-weight: 600; color: var(--ink-soft); margin-top: 8px; }
+.swatch-card .code b { display: block; font-size: 0.62rem; letter-spacing: 0.02em; color: var(--ink); }
+.swatch-card .focus-line { font-size: 0.72rem; font-weight: 600; line-height: 1.25; margin-top: 5px; }
+.swatch-card .focus-eyebrow { font-size: 0.52rem; letter-spacing: 0.26em; font-weight: 700; color: var(--sage-deep); margin-top: 7px; }
+
+/* today's palette — mini pantone chips */
+.palette { display: flex; gap: 8px; margin: 16px 0 20px; }
+.chip-swatch {
+  flex: 1; background: #FDFBF4; border-radius: 8px; padding: 5px;
+  box-shadow: 0 1px 2px rgba(56,47,30,0.1), 0 5px 10px -6px rgba(56,47,30,0.2);
+  border: 1px solid rgba(38,40,31,0.05);
+}
+.chip-swatch i { display: block; height: 26px; border-radius: 4px; }
+.chip-swatch em { font-style: normal; display: block; font-size: 0.53rem; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-soft); padding: 4px 3px 1px; }
+.chip-swatch em b { color: var(--ink); letter-spacing: 0.08em; }
+
+/* ---------- workout selector rail ---------- */
+.rail {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--card-warm); border: 1px solid var(--hairline); border-radius: 999px;
+  padding: 5px; margin-bottom: 16px; box-shadow: inset 0 2px 5px rgba(56,47,30,0.09);
+  overflow-x: auto; scrollbar-width: none;
+}
+.rail::-webkit-scrollbar { display: none; }
+.rail button {
+  font-family: var(--sans); border: 0; background: none; cursor: pointer;
+  flex: 0 0 auto; padding: 11px 16px; border-radius: 999px;
+  font-size: 0.84rem; font-weight: 500; color: var(--ink-soft); white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+}
+.rail button.on {
+  color: #EAF3E9; font-weight: 600;
+  background: radial-gradient(140% 120% at 22% 0%, var(--jade-hi), var(--jade-800) 62%, var(--jade-950));
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.45), inset 0 -4px 8px rgba(0,0,0,0.35),
+              0 3px 6px rgba(23, 62, 43, 0.45), 0 1px 0 rgba(255,255,255,0.6);
+}
+.rail .today-tag {
+  font-size: 0.52rem; letter-spacing: 0.18em; font-weight: 700; color: var(--jade-950);
+  background: linear-gradient(180deg, #F3E7C8, #D9C08A); border-radius: 999px; padding: 3px 7px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.7), 0 1px 2px rgba(0,0,0,0.25);
+}
+.rail .more { width: 40px; display: grid; place-items: center; padding: 11px 0; }
+.rail .more svg { width: 16px; height: 16px; }
+
+/* ---------- action tiles (glazed ceramic chips) ---------- */
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.act {
+  font-family: var(--sans); border: 0; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; justify-content: center;
+  padding: 15px 10px; border-radius: 13px; font-size: 0.86rem; font-weight: 600; color: var(--ink);
+  box-shadow: inset 0 1.5px 1px rgba(255,255,255,0.65), inset 0 -3px 5px rgba(46, 42, 26, 0.14),
+              0 2px 3px rgba(56,47,30,0.14), 0 8px 14px -8px rgba(56,47,30,0.3);
+}
+.act:active { box-shadow: inset 0 3px 6px rgba(46,42,26,0.25); transform: translateY(1px); }
+.act svg { width: 17px; height: 17px; }
+.act.sage  { background: linear-gradient(170deg, #D5DEC2, var(--sage)); }
+.act.peach { background: linear-gradient(170deg, var(--peach-soft), var(--peach)); }
+.act.cream { background: linear-gradient(170deg, #F8F2DF, #E8D9B4); }
+.act.pool  { background: linear-gradient(170deg, #CFE4E5, var(--pool)); }
+.act.lilac { background: linear-gradient(170deg, #E4DDEE, var(--lilac)); }
+
+/* ---------- guardrail: jade marble bar ---------- */
+.guard {
+  display: flex; align-items: center; gap: 11px;
+  color: #EAF3E9; border-radius: 14px; padding: 13px 13px 13px 16px; margin-bottom: 20px;
+  background: linear-gradient(120deg, var(--jade-800), var(--jade) 45%, var(--jade-950));
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -5px 10px rgba(0,0,0,0.3), var(--shadow-pop);
+  font-size: 0.84rem; font-weight: 500;
+}
+.guard svg { width: 18px; height: 18px; flex: 0 0 auto; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4)); }
+.guard span { flex: 1; position: relative; z-index: 2; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+.guard .more-pill {
+  position: relative; z-index: 2; flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
+  font-size: 0.72rem; font-weight: 600; color: var(--jade-950);
+  background: linear-gradient(180deg, #F5EBD2, #DCC793); border-radius: 999px; padding: 7px 12px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.8), 0 2px 4px rgba(0,0,0,0.35);
+}
+.guard .more-pill svg { width: 12px; height: 12px; }
+
+/* ---------- exercise cards ---------- */
+.ex {
+  position: relative; background: var(--card); border-radius: 18px;
+  border: 1px solid rgba(38,40,31,0.07);
+  box-shadow: var(--shadow-card); margin-bottom: 20px; overflow: visible;
+}
+.ex-body { display: flex; gap: 13px; padding: 15px 15px 12px; }
+
+/* numbered glazed keycap, floating on the corner */
+.ex-num {
+  position: absolute; top: -9px; left: -7px; z-index: 3;
+  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 600; font-size: 1.02rem; color: #F6F2E4;
+  background: radial-gradient(130% 110% at 26% 10%, var(--ac-hi), var(--ac-deep) 74%);
+  box-shadow: inset 0 1.5px 1.5px rgba(255,255,255,0.55), inset 0 -3.5px 5px rgba(0,0,0,0.38),
+              0 4px 8px -2px rgba(46,42,26,0.5);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+
+/* illustration frame: arched niche + zellige wainscot */
+.fig {
+  flex: 0 0 104px; align-self: flex-start;
+  border-radius: 60px 60px 12px 12px; overflow: hidden;
+  background: linear-gradient(180deg, #FBF7EA, #F1E9D4);
+  border: 1px solid rgba(38,40,31,0.09);
+  box-shadow: inset 0 3px 7px rgba(56,47,30,0.14), 0 1px 0 rgba(255,255,255,0.8);
+}
+.fig svg.figure { display: block; width: 100%; height: 108px; padding: 12px 10px 6px; }
+.fig .tiles {
+  height: 22px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.42), transparent 45%, rgba(0,0,0,0.14)),
+    repeating-linear-gradient(90deg, var(--ac-t1) 0 17px, var(--ac-t2) 17px 34px, var(--ac-t3) 34px 51px);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.18);
+}
+
+.ex-main { flex: 1; min-width: 0; padding-top: 4px; }
+.ex-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ex-name { font-family: var(--serif); font-weight: 600; font-size: 1.22rem; line-height: 1.1; }
+
+/* target as a mini pantone tag */
+.p-tag {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+  background: #FDFBF4; border: 1px solid rgba(38,40,31,0.08); border-radius: 6px;
+  padding: 4px 8px 4px 5px; box-shadow: 0 1px 2px rgba(56,47,30,0.12);
+  font-size: 0.64rem; font-weight: 600; color: var(--ink-soft); white-space: nowrap;
+}
+.p-tag i { width: 12px; height: 16px; border-radius: 2.5px; background: linear-gradient(160deg, var(--ac-hi), var(--ac-deep)); }
+
+.ex-cues { color: var(--ink-soft); font-size: 0.8rem; line-height: 1.4; margin: 6px 0 2px; }
+.ex-stop { display: flex; gap: 5px; align-items: baseline; color: var(--terra-deep); font-size: 0.74rem; font-weight: 500; margin-bottom: 10px; }
+.ex-stop svg { width: 11px; height: 11px; transform: translateY(1px); flex: 0 0 auto; }
+
+/* set rows: ivory ceramic steppers + jade check keycaps */
+.sets { display: flex; flex-direction: column; gap: 9px; }
+.set { display: flex; align-items: center; gap: 10px; }
+.set .lbl { font-size: 0.6rem; letter-spacing: 0.16em; font-weight: 700; color: var(--ink-mute); width: 42px; white-space: nowrap; flex: 0 0 auto; }
+.stepper {
+  display: flex; align-items: stretch; border-radius: 10px; overflow: hidden;
+  background: linear-gradient(180deg, #FDFAF1, #EFE7D2);
+  box-shadow: inset 0 1.5px 1px rgba(255,255,255,0.9), inset 0 -2px 4px rgba(56,47,30,0.16),
+              0 2px 3px rgba(56,47,30,0.16), 0 5px 8px -5px rgba(56,47,30,0.3);
+}
+.stepper button {
+  font-family: var(--sans); border: 0; background: none; cursor: pointer;
+  width: 38px; font-size: 1.05rem; font-weight: 600; color: var(--ink-soft); padding: 9px 0;
+}
+.stepper button:active { background: rgba(56,47,30,0.08); box-shadow: inset 0 2px 4px rgba(56,47,30,0.2); }
+.stepper .n {
+  width: 46px; display: grid; place-items: center; font-family: var(--serif);
+  font-weight: 600; font-size: 1.08rem; font-variant-numeric: tabular-nums;
+  background: rgba(255,255,255,0.55); border-inline: 1px solid rgba(56,47,30,0.1);
+}
+.check {
+  margin-left: auto; width: 42px; height: 40px; border: 0; cursor: pointer; border-radius: 11px;
+  display: grid; place-items: center; color: rgba(246,242,228,0.95);
+  background: linear-gradient(180deg, #FBF7EA, #E9E0C8);
+  box-shadow: inset 0 1.5px 1px rgba(255,255,255,0.85), inset 0 -2.5px 4px rgba(56,47,30,0.2), 0 2px 4px rgba(56,47,30,0.2);
+  color: rgba(56,47,30,0.28);
+}
+.check svg { width: 19px; height: 19px; }
+.check.done {
+  color: #F0F6EC;
+  background: radial-gradient(130% 115% at 28% 8%, var(--jade-hi), var(--jade-800) 70%, var(--jade-950));
+  box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.55), inset 0 -3.5px 6px rgba(0,0,0,0.4),
+              0 3px 7px rgba(23,62,43,0.45);
+}
+.check.done svg { filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.45)); }
+
+/* card toolbar rail (wood / marble variants) */
+.ex-rail {
+  display: flex; align-items: stretch; margin: 12px -1px -1px; border-radius: 0 0 17px 17px; overflow: hidden;
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.25);
+}
+.ex-rail button {
+  font-family: var(--sans); border: 0; background: none; cursor: pointer;
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+  color: rgba(250, 245, 230, 0.92); font-size: 0.62rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 11px 1px; text-shadow: 0 1px 1.5px rgba(0,0,0,0.4); position: relative; z-index: 2;
+  white-space: nowrap;
+}
+.ex-rail button + button { border-left: 1px solid rgba(250,245,230,0.18); }
+.ex-rail button:active { background: rgba(0,0,0,0.16); }
+.ex-rail svg { width: 13px; height: 13px; flex: 0 0 auto; }
+
+/* colorways */
+.ex.jade  { --ac-hi: var(--jade-hi); --ac-deep: var(--jade-800);
+            --ac-t1: #7FA98B; --ac-t2: #52815F; --ac-t3: #97BC9E; }
+.ex.terra { --ac-hi: #D98763; --ac-deep: var(--terra-deep);
+            --ac-t1: #E5A483; --ac-t2: #BC5F49; --ac-t3: #EFBE9E; }
+.ex.pool  { --ac-hi: #8FBDC4; --ac-deep: #40707D;
+            --ac-t1: #9CC4C7; --ac-t2: #5E8E96; --ac-t3: #BAD8D6; }
+.ex.jade  .ex-rail {
+  background:
+    repeating-linear-gradient(92deg, rgba(50, 33, 16, 0.22) 0 2px, transparent 2px 9px, rgba(255, 230, 190, 0.09) 9px 11px, transparent 11px 26px),
+    linear-gradient(180deg, #96754F, var(--wood) 45%, var(--wood-deep));
+}
+.ex.terra .ex-rail { background: linear-gradient(120deg, #A0503C, var(--terra) 50%, #8E4231); }
+.ex.pool  .ex-rail { background: linear-gradient(120deg, #4A757F, var(--pool-deep) 55%, #3C616C); }
+
+/* ---------- tab bar ---------- */
+nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px; z-index: 50;
+  display: flex; gap: 6px; align-items: stretch;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(242, 237, 223, 0), rgba(242, 237, 223, 0.94) 30%);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+nav .tabs {
+  flex: 1; display: flex; background: var(--card); border-radius: 18px; padding: 6px;
+  border: 1px solid var(--hairline); box-shadow: var(--shadow-pop);
+}
+nav button {
+  font-family: var(--sans); border: 0; background: none; cursor: pointer;
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 2px 7px; border-radius: 13px; color: var(--ink-mute);
+  font-size: 0.56rem; letter-spacing: 0.2em; font-weight: 700;
+}
+nav button svg { width: 19px; height: 19px; }
+nav button.on {
+  color: #EAF3E9;
+  background: radial-gradient(140% 120% at 25% 0%, var(--jade-hi), var(--jade-800) 65%, var(--jade-950));
+  box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.5), inset 0 -4px 7px rgba(0,0,0,0.38), 0 4px 8px rgba(23,62,43,0.4);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.footnote { text-align: center; color: var(--ink-mute); font-size: 0.66rem; letter-spacing: 0.16em; font-weight: 600; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div id="page">
+
+  <header>
+    <div class="brand">
+      <div>
+        <div class="wordmark">Forme</div>
+        <div class="brand-sub">MOVEMENT, REFINED</div>
+      </div>
+      <div class="logo-tiles"><span></span><span></span><span></span><span></span></div>
+    </div>
+    <div class="profile">
+      <div class="who">
+        <div class="name">Azhar</div>
+        <div class="lvl">LEVEL 12</div>
+      </div>
+      <div class="avatar glaze">A</div>
+      <i data-lucide="chevron-down"></i>
+    </div>
+  </header>
+
+  <div class="eyebrow">SATURDAY, JULY 4</div>
+  <div class="hero">
+    <div>
+      <h1>Foundation B</h1>
+      <div class="hero-sub"><span class="dot"></span>Lunge, push, carry, core, mobility · about 35 min</div>
+    </div>
+    <aside class="swatch-card">
+      <div class="swatch-block glaze"></div>
+      <div class="code">PANTONE<sup>®</sup><b>17-0119 · Willow</b></div>
+      <div class="focus-eyebrow">FOCUS</div>
+      <div class="focus-line">Strength &amp; Stability</div>
+    </aside>
+  </div>
+
+  <div class="palette">
+    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#7FA98B,#52815F)"></i><em><b>18-0625</b> · Glutes</em></div>
+    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#E5A483,#BC5F49)"></i><em><b>16-1441</b> · Chest</em></div>
+    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#9CC4C7,#5E8E96)"></i><em><b>17-4911</b> · Grip</em></div>
+  </div>
+
+  <div class="rail">
+    <button>Foundation A</button>
+    <button class="on glaze">Foundation B <span class="today-tag">TODAY</span></button>
+    <button>Back Reset Circuit</button>
+    <button class="more"><i data-lucide="ellipsis"></i></button>
+  </div>
+
+  <div class="actions">
+    <button class="act sage glaze"><i data-lucide="sliders-horizontal"></i>Customize today</button>
+    <button class="act peach glaze"><i data-lucide="sparkles"></i>Warm-up</button>
+    <button class="act cream glaze"><i data-lucide="circle-plus"></i>Add exercise</button>
+    <button class="act pool glaze"><i data-lucide="timer"></i>Quick log</button>
+    <button class="act lilac glaze"><i data-lucide="layout-grid"></i>Tools</button>
+  </div>
+
+  <div class="guard marble glaze">
+    <i data-lucide="shield-check"></i>
+    <span>Stop any set if back pain goes above 5/10</span>
+    <span class="more-pill">Learn more <i data-lucide="chevron-right"></i></span>
+  </div>
+
+  <!-- ══════ exercise 1 · jade / wood ══════ -->
+  <section class="ex jade">
+    <div class="ex-num glaze">1</div>
+    <div class="ex-body">
+      <div class="fig">
+        <svg class="figure" viewBox="0 0 100 100" fill="none" stroke="#4C5B45" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="47" cy="18" r="8.5"/>
+          <path d="M47 27 L45 52"/>
+          <path d="M45 52 L30 66 L30 84"/>
+          <path d="M45 52 L60 62 L62 84"/>
+          <path d="M46 34 L28 44"/>
+          <path d="M46 34 L64 40"/>
+          <path d="M14 90 L88 90" stroke-width="2.4" opacity="0.45"/>
+        </svg>
+        <div class="tiles"></div>
+      </div>
+      <div class="ex-main">
+        <div class="ex-head">
+          <div class="ex-name">Supported Reverse Lunge</div>
+          <div class="p-tag"><i></i>2 × 6–10 / side</div>
+        </div>
+        <div class="ex-cues">Hold chair or wall, step back softly, stay tall</div>
+        <div class="ex-stop"><i data-lucide="circle-alert"></i>Stop if: Knee instability or sharp pain</div>
+        <div class="sets">
+          <div class="set"><span class="lbl">SET 1</span>
+            <div class="stepper"><button data-step="-1">−</button><span class="n">10</span><button data-step="1">+</button></div>
+            <button class="check done glaze"><i data-lucide="check"></i></button>
+          </div>
+          <div class="set"><span class="lbl">SET 2</span>
+            <div class="stepper"><button data-step="-1">−</button><span class="n">10</span><button data-step="1">+</button></div>
+            <button class="check done glaze"><i data-lucide="check"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ex-rail">
+      <button><i data-lucide="play"></i>Form video</button>
+      <button><i data-lucide="list"></i>Details</button>
+      <button><i data-lucide="activity"></i>Motion</button>
+      <button><i data-lucide="plus"></i>Add set</button>
+      <button><i data-lucide="timer"></i>60s</button>
+    </div>
+  </section>
+
+  <!-- ══════ exercise 2 · terracotta ══════ -->
+  <section class="ex terra">
+    <div class="ex-num glaze">2</div>
+    <div class="ex-body">
+      <div class="fig">
+        <svg class="figure" viewBox="0 0 100 100" fill="none" stroke="#4C5B45" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="52" r="8"/>
+          <path d="M30 57 L58 66 L84 72"/>
+          <path d="M36 59 L34 76"/>
+          <path d="M56 66 L58 78"/>
+          <path d="M14 88 L90 88" stroke-width="2.4" opacity="0.45"/>
+        </svg>
+        <div class="tiles"></div>
+      </div>
+      <div class="ex-main">
+        <div class="ex-head">
+          <div class="ex-name">Counter Push-Up</div>
+          <div class="p-tag"><i></i>2 × 8–12 reps</div>
+        </div>
+        <div class="ex-cues">Keep ribs down, touch chest lightly to surface</div>
+        <div class="ex-stop"><i data-lucide="circle-alert"></i>Stop if: Pain above 5/10</div>
+        <div class="sets">
+          <div class="set"><span class="lbl">SET 1</span>
+            <div class="stepper"><button data-step="-1">−</button><span class="n">12</span><button data-step="1">+</button></div>
+            <button class="check done glaze"><i data-lucide="check"></i></button>
+          </div>
+          <div class="set"><span class="lbl">SET 2</span>
+            <div class="stepper"><button data-step="-1">−</button><span class="n">12</span><button data-step="1">+</button></div>
+            <button class="check glaze"><i data-lucide="check"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ex-rail marble">
+      <button><i data-lucide="play"></i>Form video</button>
+      <button><i data-lucide="list"></i>Details</button>
+      <button><i data-lucide="activity"></i>Motion</button>
+      <button><i data-lucide="plus"></i>Add set</button>
+      <button><i data-lucide="timer"></i>60s</button>
+    </div>
+  </section>
+
+  <!-- ══════ exercise 3 · pool ══════ -->
+  <section class="ex pool">
+    <div class="ex-num glaze">3</div>
+    <div class="ex-body">
+      <div class="fig">
+        <svg class="figure" viewBox="0 0 100 100" fill="none" stroke="#4C5B45" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="50" cy="16" r="8.5"/>
+          <path d="M50 25 L50 56"/>
+          <path d="M50 56 L40 86"/>
+          <path d="M50 56 L62 84"/>
+          <path d="M50 32 L34 44 L33 56"/>
+          <path d="M50 32 L66 44 L67 56"/>
+          <rect x="27" y="56" width="12" height="15" rx="2.5" stroke-width="3"/>
+          <rect x="61" y="56" width="12" height="15" rx="2.5" stroke-width="3"/>
+          <path d="M12 92 L88 92" stroke-width="2.4" opacity="0.45"/>
+        </svg>
+        <div class="tiles"></div>
+      </div>
+      <div class="ex-main">
+        <div class="ex-head">
+          <div class="ex-name">Farmer Carry</div>
+          <div class="p-tag"><i></i>2 × 30–40 steps</div>
+        </div>
+        <div class="ex-cues">Walk tall, ribs down, no leaning</div>
+        <div class="ex-stop"><i data-lucide="circle-alert"></i>Stop if: Back pain or grip failure</div>
+        <div class="sets">
+          <div class="set"><span class="lbl">SET 1</span>
+            <div class="stepper"><button data-step="-1">−</button><span class="n">40</span><button data-step="1">+</button></div>
+            <button class="check glaze"><i data-lucide="check"></i></button>
+          </div>
+          <div class="set"><span class="lbl">SET 2</span>
+            <div class="stepper"><button data-step="-1">−</button><span class="n">40</span><button data-step="1">+</button></div>
+            <button class="check glaze"><i data-lucide="check"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ex-rail marble">
+      <button><i data-lucide="play"></i>Form video</button>
+      <button><i data-lucide="list"></i>Details</button>
+      <button><i data-lucide="activity"></i>Motion</button>
+      <button><i data-lucide="plus"></i>Add set</button>
+      <button><i data-lucide="timer"></i>60s</button>
+    </div>
+  </section>
+
+  <div class="footnote">FORME · DESIGN DIRECTION MOCKUP · NOT WIRED TO DATA</div>
+</div>
+
+<nav>
+  <div class="tabs">
+    <button class="on glaze"><i data-lucide="sun"></i>TODAY</button>
+    <button><i data-lucide="book-open"></i>LIBRARY</button>
+    <button><i data-lucide="footprints"></i>RUN</button>
+    <button><i data-lucide="trending-up"></i>PROGRESS</button>
+  </div>
+</nav>
+
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+<script>
+lucide.createIcons();
+/* demo interactivity only */
+document.addEventListener('click', (e) => {
+  const chk = e.target.closest('.check');
+  if (chk) chk.classList.toggle('done');
+  const st = e.target.closest('[data-step]');
+  if (st) {
+    const n = st.parentElement.querySelector('.n');
+    n.textContent = Math.max(0, Number(n.textContent) + Number(st.dataset.step));
+  }
+  const railBtn = e.target.closest('.rail button:not(.more)');
+  if (railBtn) {
+    railBtn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('on', 'glaze'));
+    railBtn.classList.add('on', 'glaze');
+  }
+  const tab = e.target.closest('nav .tabs button');
+  if (tab) {
+    tab.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('on', 'glaze'));
+    tab.classList.add('on', 'glaze');
+  }
+});
+</script>
+</body>
+</html>
