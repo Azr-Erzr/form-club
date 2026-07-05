@@ -184,6 +184,21 @@
     const u = state.users.find(x => x.UserName === name);
     return (u && u.DisplayName) || name || 'Azhar';
   }
+  function switchProfile(userName, opts) {
+    const name = String(userName || '').trim() || 'Azhar';
+    if (name === currentUser()) return false;
+    stopRest();
+    stopMotionSet(false);
+    stopVoiceInput(false);
+    saveSettings({ user: name });
+    state.workoutId = null;
+    updateProfileBadge();
+    closeModal();
+    if (opts && opts.toast !== false) toast('Switched to ' + displayNameFor(name) + '.', 'user-round');
+    render();
+    refreshRemoteLogs(false);
+    return true;
+  }
   function workoutOwner(w) {
     return String(w.UserName || w.Profile || w.Owner || w.OwnerUserName || '').trim();
   }
@@ -962,8 +977,9 @@
     if (!mine.length) {
       return '<div class="eyebrow">' + esc(displayNameFor(currentUser())) + '</div>' +
         '<h1 class="pagetitle">No workout plan yet</h1>' +
-        '<p class="pagesub">Start a routine for this profile, then add exercises from the library.</p>' +
-        '<button class="bigbtn" data-action="create-today-routine"><i data-lucide="plus"></i>Create today\'s routine</button>';
+        '<p class="pagesub">This profile is a clean slate. Build today as you go, or create a reusable profile-owned routine from the exercises you add.</p>' +
+        '<button class="bigbtn" data-action="create-today-routine"><i data-lucide="plus"></i>Create blank today</button>' +
+        '<button class="bigbtn subtle mt16" data-action="open-add-exercise"><i data-lucide="search"></i>Add first exercise</button>';
     }
 
     let cards = '';
@@ -1793,11 +1809,8 @@
       Active: 'Yes',
     };
     appendAndPost('appendUser', state.users, rec);
-    saveSettings({ user: rec.UserName });
-    state.workoutId = null;
-    closeModal();
     toast('Profile added for ' + rec.DisplayName + '.', 'user-plus');
-    render();
+    switchProfile(rec.UserName, { toast: false });
   }
 
   function saveProfileStats() {
@@ -2038,6 +2051,10 @@
 
   document.addEventListener('change', (ev) => {
     if (ev.target.id === 'importFile' && ev.target.files[0]) importData(ev.target.files[0]);
+    if (ev.target.id === 'setUser') {
+      switchProfile(ev.target.value, { toast: true });
+      return;
+    }
     if (ev.target.dataset && ev.target.dataset.detail) {
       const sess = getSession(state.workoutId);
       const exId = ev.target.dataset.ex;
