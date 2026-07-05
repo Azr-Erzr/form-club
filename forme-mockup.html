@@ -265,10 +265,10 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 11vw,
   border: 1px solid rgba(38,40,31,0.09);
   box-shadow: inset 0 3px 7px rgba(56,47,30,0.14), 0 1px 0 rgba(255,255,255,0.8);
 }
-.fig img.figure {
-  display: block; width: 100%; height: 112px; object-fit: cover; object-position: center 22%;
-  mix-blend-mode: multiply; filter: sepia(0.22) saturate(0.82) contrast(0.97);
-}
+.fig svg.body { display: block; width: 100%; height: 112px; padding: 9px 20px 4px; }
+.fig .sil { fill: #E0D7BE; }
+.fig .mus { fill: var(--ac-deep); opacity: 0.92; }
+.fig .mus-hi { fill: var(--ac-hi); opacity: 0.55; }
 .fig .tiles {
   height: 22px;
   background:
@@ -455,8 +455,21 @@ nav button.on {
     <div class="ex-num glaze">1</div>
     <div class="ex-body">
       <div class="fig">
-        <img class="figure" alt="Reverse lunge demonstration" loading="lazy"
-             src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bodyweight_Walking_Lunge/0.jpg">
+        <svg class="body" viewBox="0 0 120 200" aria-label="Targets quads and glutes">
+          <g class="sil">
+            <circle cx="60" cy="21" r="12.5"/>
+            <path d="M44 38 Q60 33 76 38 L80 52 Q83 68 78 86 L76 108 Q75 116 72 118 L48 118 Q45 116 44 108 L42 86 Q37 68 40 52 Z"/>
+            <path d="M40 44 Q30 52 28 72 L26 100 Q26 107 29 113" stroke="#E0D7BE" stroke-width="11" fill="none" stroke-linecap="round"/>
+            <path d="M80 44 Q90 52 92 72 L94 100 Q94 107 91 113" stroke="#E0D7BE" stroke-width="11" fill="none" stroke-linecap="round"/>
+            <path d="M51 118 L48 152 Q47 168 49 186" stroke="#E0D7BE" stroke-width="14" fill="none" stroke-linecap="round"/>
+            <path d="M69 118 L72 152 Q73 168 71 186" stroke="#E0D7BE" stroke-width="14" fill="none" stroke-linecap="round"/>
+          </g>
+          <ellipse class="mus" cx="60" cy="116" rx="13" ry="8"/>
+          <ellipse class="mus" cx="50" cy="143" rx="6.5" ry="16"/>
+          <ellipse class="mus" cx="70" cy="143" rx="6.5" ry="16"/>
+          <ellipse class="mus-hi" cx="48.5" cy="137" rx="3" ry="8"/>
+          <ellipse class="mus-hi" cx="68.5" cy="137" rx="3" ry="8"/>
+        </svg>
         <div class="tiles"></div>
       </div>
       <div class="ex-main">
@@ -492,8 +505,22 @@ nav button.on {
     <div class="ex-num glaze">2</div>
     <div class="ex-body">
       <div class="fig">
-        <img class="figure" alt="Push-up demonstration" loading="lazy"
-             src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pushups/0.jpg">
+        <svg class="body" viewBox="0 0 120 200" aria-label="Targets chest and triceps">
+          <g class="sil">
+            <circle cx="60" cy="21" r="12.5"/>
+            <path d="M44 38 Q60 33 76 38 L80 52 Q83 68 78 86 L76 108 Q75 116 72 118 L48 118 Q45 116 44 108 L42 86 Q37 68 40 52 Z"/>
+            <path d="M40 44 Q30 52 28 72 L26 100 Q26 107 29 113" stroke="#E0D7BE" stroke-width="11" fill="none" stroke-linecap="round"/>
+            <path d="M80 44 Q90 52 92 72 L94 100 Q94 107 91 113" stroke="#E0D7BE" stroke-width="11" fill="none" stroke-linecap="round"/>
+            <path d="M51 118 L48 152 Q47 168 49 186" stroke="#E0D7BE" stroke-width="14" fill="none" stroke-linecap="round"/>
+            <path d="M69 118 L72 152 Q73 168 71 186" stroke="#E0D7BE" stroke-width="14" fill="none" stroke-linecap="round"/>
+          </g>
+          <ellipse class="mus" cx="51" cy="57" rx="8.5" ry="6.5"/>
+          <ellipse class="mus" cx="69" cy="57" rx="8.5" ry="6.5"/>
+          <ellipse class="mus" cx="31" cy="70" rx="4.5" ry="10" transform="rotate(8 31 70)"/>
+          <ellipse class="mus" cx="89" cy="70" rx="4.5" ry="10" transform="rotate(-8 89 70)"/>
+          <ellipse class="mus-hi" cx="49" cy="54" rx="4" ry="2.8"/>
+          <ellipse class="mus-hi" cx="67" cy="54" rx="4" ry="2.8"/>
+        </svg>
         <div class="tiles"></div>
       </div>
       <div class="ex-main">
@@ -529,8 +556,21 @@ nav button.on {
     <div class="ex-num glaze">3</div>
     <div class="ex-body">
       <div class="fig">
-        <img class="figure" alt="Farmer carry demonstration" loading="lazy"
-             src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Farmers_Walk/0.jpg">
+        <svg class="body" viewBox="0 0 120 200" aria-label="Targets forearms, traps and core">
+          <g class="sil">
+            <circle cx="60" cy="21" r="12.5"/>
+            <path d="M44 38 Q60 33 76 38 L80 52 Q83 68 78 86 L76 108 Q75 116 72 118 L48 118 Q45 116 44 108 L42 86 Q37 68 40 52 Z"/>
+            <path d="M40 44 Q30 52 28 72 L26 100 Q26 107 29 113" stroke="#E0D7BE" stroke-width="11" fill="none" stroke-linecap="round"/>
+            <path d="M80 44 Q90 52 92 72 L94 100 Q94 107 91 113" stroke="#E0D7BE" stroke-width="11" fill="none" stroke-linecap="round"/>
+            <path d="M51 118 L48 152 Q47 168 49 186" stroke="#E0D7BE" stroke-width="14" fill="none" stroke-linecap="round"/>
+            <path d="M69 118 L72 152 Q73 168 71 186" stroke="#E0D7BE" stroke-width="14" fill="none" stroke-linecap="round"/>
+          </g>
+          <ellipse class="mus" cx="60" cy="43" rx="15" ry="5.5"/>
+          <ellipse class="mus" cx="27.5" cy="99" rx="4.5" ry="12" transform="rotate(4 27.5 99)"/>
+          <ellipse class="mus" cx="92.5" cy="99" rx="4.5" ry="12" transform="rotate(-4 92.5 99)"/>
+          <ellipse class="mus" cx="60" cy="94" rx="9" ry="12"/>
+          <ellipse class="mus-hi" cx="60" cy="89" rx="4.5" ry="5"/>
+        </svg>
         <div class="tiles"></div>
       </div>
       <div class="ex-main">
