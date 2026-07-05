@@ -160,6 +160,7 @@
     audioCtx: null, wakeLock: null, mediaSessionMode: '',
     motion: { active: false, exId: '', wdId: '', reps: 0, lastPeakAt: 0, lastCueAt: 0, avgTempo: 0, samples: [] },
     voiceDraft: null,
+    voice: { listening: false, recognition: null },
     sync: { reading: false, writing: false, lastReadAt: 0, lastWriteAt: 0, lastCoreAt: 0, lastError: '' },
   };
 
@@ -315,6 +316,16 @@
   /* ---------------- write-back + queue ---------------- */
 
   function queue() { return lsGet('ef_queue', []); }
+  function normalizeQueueItem(item) {
+    return {
+      action: item.action,
+      payload: item.payload || {},
+      queuedAt: item.queuedAt || new Date().toISOString(),
+      attempts: Number(item.attempts || 0),
+      lastAttemptAt: item.lastAttemptAt || '',
+      lastError: item.lastError || '',
+    };
+  }
   function itemId(item) {
     const p = (item && item.payload) || {};
     return item.action + ':' + (p.LogID || p.EntryID || p.WorkoutDayID || p.WorkoutID || p.UserName || p.id || JSON.stringify(p));
@@ -326,29 +337,48 @@
       if (seen.has(id)) return false;
       seen.add(id);
       return true;
-    });
+    }).map(normalizeQueueItem);
   }
   function setQueue(q) { lsSet('ef_queue', dedupeQueue(q)); updateSyncBadge(); }
-  function enqueue(action, payload) { setQueue(queue().concat([{ action, payload }])); }
+  function enqueue(action, payload, error) {
+    const next = normalizeQueueItem({ action, payload });
+    next.lastError = error || '';
+    setQueue(queue().concat([next]));
+  }
 
-  async function post(action, payload) {
-    if (!CFG.scriptUrl) { enqueue(action, payload); return false; }
+  async function writeItem(item, timeoutMs) {
+    const controller = window.AbortController ? new AbortController() : null;
+    const t = controller ? setTimeout(() => controller.abort(), timeoutMs || 14000) : null;
     try {
       const r = await fetch(CFG.scriptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action, payload }),
+        body: JSON.stringify({ action: item.action, payload: item.payload || {} }),
+        signal: controller ? controller.signal : undefined,
       });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.ok === false) throw new Error(j.error || 'write failed');
+      const text = await r.text();
+      let j = {};
+      try { j = text ? JSON.parse(text) : {}; } catch (e) { throw new Error('Server returned non-JSON response'); }
+      if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+      return j;
+    } finally {
+      if (t) clearTimeout(t);
+    }
+  }
+
+  async function post(action, payload) {
+    if (!CFG.scriptUrl) { enqueue(action, payload, 'Missing Apps Script URL'); return false; }
+    try {
+      await writeItem({ action, payload }, 14000);
       state.sync.lastWriteAt = Date.now();
       state.sync.lastError = '';
       updateSyncBadge();
       setTimeout(() => refreshRemoteLogs(false), 1500);
       return true;
     } catch (e) {
-      enqueue(action, payload);
-      state.sync.lastError = 'Write queued';
+      const msg = e && e.name === 'AbortError' ? 'Write timed out' : (e && e.message ? e.message : 'Write failed');
+      enqueue(action, payload, msg);
+      state.sync.lastError = msg;
       updateSyncBadge();
       return false;
     }
@@ -364,23 +394,24 @@
     let remaining = [];
     try {
       for (const item of q) {
+        const next = normalizeQueueItem(item);
+        next.attempts += 1;
+        next.lastAttemptAt = new Date().toISOString();
         try {
-          const r = await fetch(CFG.scriptUrl, {
-            method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(item),
-          });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || j.ok === false) throw new Error('fail');
-        } catch (e) { remaining.push(item); }
+          await writeItem(next, 14000);
+        } catch (e) {
+          next.lastError = e && e.name === 'AbortError' ? 'Write timed out' : (e && e.message ? e.message : 'Write failed');
+          remaining.push(next);
+        }
       }
     } finally {
       state.sync.writing = false;
     }
     setQueue(remaining);
-    if (remaining.length) state.sync.lastError = 'Write retry pending';
+    if (remaining.length) state.sync.lastError = remaining[0].action + ': ' + (remaining[0].lastError || 'Write retry pending');
     else { state.sync.lastWriteAt = Date.now(); state.sync.lastError = ''; setTimeout(() => refreshRemoteLogs(false), 1200); }
     if (showToast) {
-      if (remaining.length) toast(remaining.length + ' logs still unsynced - will retry.', 'cloud-off', true);
+      if (remaining.length) toast(remaining.length + ' writes still queued: ' + (remaining[0].lastError || 'will retry'), 'cloud-off', true);
       else toast('All logs synced to the club sheet.', 'check-circle-2');
     }
     return remaining.length === 0;
@@ -428,7 +459,7 @@
     if (btn) {
       btn.classList.toggle('synced', n === 0 && !!CFG.scriptUrl && !state.sync.lastError);
       btn.classList.toggle('busy', state.sync.reading || state.sync.writing);
-      btn.title = n ? n + ' queued' : 'Last read ' + timeAgo(state.sync.lastReadAt);
+      btn.title = n ? n + ' queued' + (state.sync.lastError ? ' - ' + state.sync.lastError : '') : 'Last read ' + timeAgo(state.sync.lastReadAt);
     }
     try {
       if (navigator.setAppBadge && navigator.clearAppBadge) {
@@ -529,14 +560,16 @@
   /* ---------------- modal ---------------- */
 
   function openModal(html) {
-    $('#modalSheet').innerHTML = '<div class="sheet-handle"></div>' + html;
+    $('#modalSheet').innerHTML = '<button class="sheet-handle" data-action="close-modal" aria-label="Close sheet"></button>' + html;
     $('#modal').hidden = false;
     document.body.style.overflow = 'hidden';
     lucide.createIcons({ nodes: [$('#modalSheet')] });
   }
   function closeModal() {
+    stopVoiceInput(false);
     $('#modal').hidden = true;
     $('#modalSheet').innerHTML = '';
+    $('#modalSheet').style.transform = '';
     document.body.style.overflow = '';
   }
 
@@ -826,8 +859,9 @@
     const ex = exById(exId) || { ExerciseName: exId };
     state.motion = { active: true, exId, wdId, reps: 0, lastPeakAt: 0, lastCueAt: 0, avgTempo: 0, samples: [] };
     $('#motionMain').textContent = ex.ExerciseName;
-    $('#motionSub').textContent = 'Move with control - finish when the set is done';
+    $('#motionSub').textContent = 'Motion coach on - waiting for rhythm';
     $('#motionbar').hidden = false;
+    $('#motionbar').classList.add('active');
     window.addEventListener('devicemotion', handleMotionSample);
     requestWakeLock();
     setupMediaSession('motion', 'Motion set coach');
@@ -867,6 +901,7 @@
     if (state.motion.active) window.removeEventListener('devicemotion', handleMotionSample);
     state.motion.active = false;
     $('#motionbar').hidden = true;
+    $('#motionbar').classList.remove('active');
     clearMediaSession();
     releaseWakeLock();
     if (showToast) toast('Motion coach stopped.', 'activity');
@@ -960,6 +995,14 @@
     return true;
   }
 
+  function isWarmupRow(row) {
+    return String((row && row.Notes) || '').toLowerCase().startsWith('warm-up:');
+  }
+
+  function warmupKey(wid) { return 'ef_warmup_collapsed_' + userKey(currentUser()) + '_' + wid; }
+  function warmupCollapsed(wid) { return !!lsGet(warmupKey(wid), false); }
+  function setWarmupCollapsed(wid, value) { lsSet(warmupKey(wid), !!value); }
+
   function addWarmupBlock() {
     const wid = ensureTodayRoutine(state.workoutId);
     const existing = new Set(rowsForWorkout(wid).map(r => r.ExerciseID));
@@ -981,7 +1024,19 @@
       appendAndPost('appendWorkoutDay', state.days, row);
       added++;
     });
+    setWarmupCollapsed(wid, false);
     return added;
+  }
+
+  function removeWarmupBlock() {
+    const wid = ensureTodayRoutine(state.workoutId);
+    const rows = rowsForWorkout(wid).filter(isWarmupRow);
+    if (!rows.length) return 0;
+    const ids = new Set(rows.map(r => r.WorkoutDayID));
+    state.days = state.days.filter(r => !(r.WorkoutID === wid && ids.has(r.WorkoutDayID)));
+    rows.forEach(row => post('deleteWorkoutDay', { WorkoutDayID: row.WorkoutDayID, WorkoutID: wid }));
+    setWarmupCollapsed(wid, false);
+    return rows.length;
   }
 
   function latestDayNote() {
@@ -1026,7 +1081,7 @@
     let cards = '';
     if (workout) {
       const rows = rowsForWorkout(wid);
-      cards = rows.map(row => {
+      const renderExerciseCard = (row) => {
         const ex = exById(row.ExerciseID) || { ExerciseName: row.ExerciseID, BackFlag: 'Green' };
         const nSets = Number(row.TargetSets) || 1;
         const done = sess.sets[row.ExerciseID] || [];
@@ -1078,7 +1133,24 @@
             '<button class="toolbtn" data-action="rest" data-sec="' + esc(row.RestSeconds || ex.RestSeconds || 60) + '"><i data-lucide="timer"></i>' + esc(row.RestSeconds || ex.RestSeconds || 60) + 's</button>' +
           '</div>' +
         '</div>');
-      }).join('');
+      };
+      const warmupRows = rows.filter(isWarmupRow);
+      const mainRows = rows.filter(row => !isWarmupRow(row));
+      const collapsed = warmupCollapsed(wid);
+      const warmupHtml = warmupRows.length ? (
+        '<div class="warmup-panel">' +
+          '<div class="warmup-head">' +
+            '<div><div class="minihead"><span>Warm-up block</span><span>' + warmupRows.length + ' moves</span></div>' +
+              '<p class="warmup-sub">Simple mobility and full-body prep before the main work.</p></div>' +
+            '<div class="warmup-actions">' +
+              '<button class="infobtn" data-action="toggle-warmup-collapse" aria-label="' + (collapsed ? 'Expand warm-up' : 'Collapse warm-up') + '"><i data-lucide="' + (collapsed ? 'chevron-down' : 'chevron-up') + '"></i></button>' +
+              '<button class="infobtn danger" data-action="remove-warmup" aria-label="Remove warm-up"><i data-lucide="x"></i></button>' +
+            '</div>' +
+          '</div>' +
+          (collapsed ? '<div class="resultcount">Collapsed - tap the chevron to show exercises.</div>' : '<div class="warmup-list">' + warmupRows.map(renderExerciseCard).join('') + '</div>') +
+        '</div>'
+      ) : '';
+      cards = warmupHtml + mainRows.map(renderExerciseCard).join('');
     }
 
     /* session progress: done sets vs planned sets */
@@ -1099,13 +1171,12 @@
       '<div class="chiprow">' + chips + '</div>' +
       '<div class="actionrow">' +
         '<button class="toolbtn actiontool" data-action="customize-today"><i data-lucide="copy-plus"></i>' + (isTodayWorkout(wid) ? 'Today routine' : 'Customize today') + '</button>' +
-        '<button class="toolbtn actiontool" data-action="add-warmup"><i data-lucide="sparkles"></i>Warm-up</button>' +
+        '<button class="toolbtn actiontool" data-action="add-warmup"><i data-lucide="sparkles"></i>' + (rowsForWorkout(wid).some(isWarmupRow) ? 'Remove warm-up' : 'Warm-up') + '</button>' +
         '<button class="toolbtn actiontool" data-action="open-add-exercise"><i data-lucide="search"></i>Add exercise</button>' +
         '<button class="toolbtn actiontool" data-action="open-voice-log"><i data-lucide="mic"></i>Quick log</button>' +
         '<button class="toolbtn actiontool" data-action="open-tools"><i data-lucide="calculator"></i>Tools</button>' +
       '</div>' +
       (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
-      (workout ? anatomyDiagramHtml(rowsForWorkout(wid)) : '') +
       cards +
       '<div class="card mt16 prep-card"><div class="minihead"><span>Pre-workout checklist</span>' +
         (prep.updatedAt ? '<button class="infobtn" data-action="open-time-info" aria-label="Time info"><i data-lucide="info"></i></button>' : '') + '</div>' +
@@ -1510,7 +1581,8 @@
       '<div class="sheet-sub">Say or type something like "bench press 135 eight reps".</div>' +
       '<label class="full"><span class="formlabel">Phrase</span><textarea id="voiceText" rows="3" placeholder="bench press 135 eight reps"></textarea></label>' +
       '<div id="voicePreview" class="mt16">' + voicePreviewHtml(null) + '</div>' +
-      '<button class="bigbtn mt16" data-action="listen-voice"' + (speechOk ? '' : ' disabled') + '><i data-lucide="mic"></i>' + (speechOk ? 'Listen' : 'Mic not supported') + '</button>' +
+      '<div id="voiceStatus" class="listen-status idle"><span></span>Ready to listen.</div>' +
+      '<button id="voiceListenBtn" class="bigbtn mt16" data-action="listen-voice"' + (speechOk ? '' : ' disabled') + '><i data-lucide="mic"></i>' + (speechOk ? 'Listen' : 'Mic not supported') + '</button>' +
       '<button class="bigbtn ghost" data-action="save-voice-log"><i data-lucide="check"></i>Save quick log</button>'
     );
     const input = $('#voiceText'); if (input) input.focus();
@@ -1582,23 +1654,54 @@
     if ($('#nextSet')) $('#nextSet').textContent = w ? (Math.round((w + 5) * 10) / 10) + ' x ' + (reps || '?') : '-';
   }
 
+  function setVoiceListening(on, text) {
+    state.voice.listening = !!on;
+    const btn = $('#voiceListenBtn');
+    const status = $('#voiceStatus');
+    if (btn) {
+      btn.classList.toggle('listening', !!on);
+      btn.innerHTML = '<i data-lucide="' + (on ? 'mic-off' : 'mic') + '"></i>' + (on ? 'Stop listening' : 'Listen');
+    }
+    if (status) {
+      status.className = 'listen-status ' + (on ? 'active' : 'idle');
+      status.innerHTML = '<span></span>' + esc(text || (on ? 'Listening now...' : 'Ready to listen.'));
+    }
+    if ($('#modalSheet')) lucide.createIcons({ nodes: [$('#modalSheet')] });
+  }
+
+  function stopVoiceInput(showToast) {
+    if (state.voice && state.voice.recognition) {
+      try { state.voice.recognition.stop(); } catch (e) {}
+      state.voice.recognition = null;
+    }
+    if (state.voice && state.voice.listening) setVoiceListening(false, showToast === false ? 'Stopped listening.' : 'Listening stopped.');
+  }
+
   function startVoiceInput() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { toast('Voice recognition is not available here. Type it instead.', 'mic-off', true); return; }
+    if (state.voice.listening) { stopVoiceInput(true); return; }
     const rec = new SR();
+    state.voice.recognition = rec;
     rec.lang = 'en-US';
     rec.interimResults = false;
     rec.maxAlternatives = 1;
+    rec.onstart = () => setVoiceListening(true, 'Listening now... tap again to stop.');
     rec.onresult = (ev) => {
       const text = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
       if ($('#voiceText')) $('#voiceText').value = text;
       state.voiceDraft = parseVoiceLog(text);
       const preview = $('#voicePreview'); if (preview) preview.innerHTML = voicePreviewHtml(state.voiceDraft);
+      setVoiceListening(false, text ? 'Heard: "' + text + '"' : 'No speech captured.');
       lucide.createIcons({ nodes: [$('#modalSheet')] });
     };
-    rec.onerror = () => toast('Could not hear that. Typing works too.', 'mic-off', true);
-    rec.start();
-    toast('Listening...', 'mic');
+    rec.onerror = () => { setVoiceListening(false, 'Could not hear that. Typing works too.'); toast('Could not hear that. Typing works too.', 'mic-off', true); };
+    rec.onend = () => {
+      state.voice.recognition = null;
+      if (state.voice.listening) setVoiceListening(false, 'Listening stopped.');
+    };
+    try { rec.start(); }
+    catch (e) { setVoiceListening(false, 'Mic could not start. Typing works too.'); toast('Mic could not start. Typing works too.', 'mic-off', true); }
   }
 
   function saveVoiceLog() {
@@ -1640,7 +1743,9 @@
   }
 
   function openSettings() {
-    const q = queue().length;
+    const queued = queue();
+    const q = queued.length;
+    const firstQueued = q ? normalizeQueueItem(queued[0]) : null;
     const latestStats = profileStatsFor(currentUser())[0] || {};
     const profileOptions = state.users.map(u =>
       '<option value="' + esc(u.UserName) + '"' + (u.UserName === currentUser() ? ' selected' : '') + '>' + esc(u.DisplayName || u.UserName) + '</option>'
@@ -1651,6 +1756,8 @@
       '<div class="kv" style="margin-bottom:12px"><span class="k">Sync</span><span class="v">Read ' + esc(timeAgo(state.sync.lastReadAt)) +
         ' · write ' + esc(timeAgo(state.sync.lastWriteAt)) + (q ? ' · ' + q + ' queued' : '') +
         (state.sync.lastError ? ' · ' + esc(state.sync.lastError) : '') + '</span></div>' +
+      (firstQueued ? '<div class="kv" style="margin-bottom:12px"><span class="k">First queued</span><span class="v">' + esc(firstQueued.action) +
+        ' · tries ' + firstQueued.attempts + (firstQueued.lastError ? ' · ' + esc(firstQueued.lastError) : '') + '</span></div>' : '') +
       '<div class="kv" style="margin-bottom:12px"><span class="k">Timers</span><span class="v">Writes retry every 30 sec. Recent logs read every 2 min. Plans and profiles read every 10 min.</span></div>' +
       '<label><span class="formlabel">Profile</span><select id="setUser">' + profileOptions + '</select></label>' +
       '<button class="bigbtn subtle mt16" data-action="open-add-profile"><i data-lucide="user-plus"></i>Add profile</button>' +
@@ -1884,8 +1991,22 @@
       render();
     }
     else if (a === 'add-warmup') {
-      const added = addWarmupBlock();
-      toast(added ? 'Warm-up added to today.' : 'Warm-up is already in today.', added ? 'sparkles' : 'check-circle-2');
+      if (rowsForWorkout(wid).some(isWarmupRow)) {
+        const removed = removeWarmupBlock();
+        toast(removed ? 'Warm-up removed from today.' : 'No warm-up to remove.', removed ? 'x' : 'check-circle-2');
+      } else {
+        const added = addWarmupBlock();
+        toast(added ? 'Warm-up added to today.' : 'Warm-up is already in today.', added ? 'sparkles' : 'check-circle-2');
+      }
+      render();
+    }
+    else if (a === 'toggle-warmup-collapse') {
+      setWarmupCollapsed(wid, !warmupCollapsed(wid));
+      render();
+    }
+    else if (a === 'remove-warmup') {
+      const removed = removeWarmupBlock();
+      toast(removed ? 'Warm-up removed from today.' : 'No warm-up to remove.', removed ? 'x' : 'check-circle-2');
       render();
     }
     else if (a === 'open-add-exercise') { openAddExercise(); }
@@ -2082,6 +2203,29 @@
   });
 
   /* modal scrim + effort/pain selection (delegated inside modal) */
+  let sheetDrag = null;
+  document.addEventListener('touchstart', (ev) => {
+    if (!ev.target.closest('.sheet-handle')) return;
+    sheetDrag = { y: ev.touches[0].clientY };
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (ev) => {
+    if (!sheetDrag) return;
+    const dy = Math.max(0, ev.touches[0].clientY - sheetDrag.y);
+    $('#modalSheet').style.transform = 'translateX(-50%) translateY(' + Math.min(120, dy) + 'px)';
+  }, { passive: true });
+
+  document.addEventListener('touchend', (ev) => {
+    if (!sheetDrag) return;
+    const sheet = $('#modalSheet');
+    const matrix = sheet.style.transform || '';
+    const match = matrix.match(/translateY\(([\d.]+)px\)/);
+    const dy = match ? Number(match[1]) : 0;
+    sheetDrag = null;
+    if (dy > 72) closeModal();
+    else sheet.style.transform = '';
+  }, { passive: true });
+
   document.addEventListener('click', (ev) => {
     if (ev.target.id === 'modalScrim') closeModal();
     const eff = ev.target.closest('#effortRow button');

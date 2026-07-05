@@ -13,6 +13,7 @@
 
 var SHEET_ID = '1-yrjMnyAGWDDZNa4K9NlEACqOn4iTorBwKNSMGEb4-c';
 var REPO_RAW = 'https://raw.githubusercontent.com/Azr-Erzr/form-club/main/data/';
+var BACKEND_VERSION = 'form-backend-v3';
 
 var LOG_SHEETS = {
   appendRunLog: 'Run_Log',
@@ -104,6 +105,7 @@ function importCsv(ss, name, url) {
 
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action;
+  if (action === 'status') return json({ ok: true, version: BACKEND_VERSION, actions: Object.keys(LOG_SHEETS).concat(['deleteWorkoutDay', 'readLogs']) });
   if (action === 'readLogs') return json(readLogs(e.parameter || {}));
   if (action === 'setupMonthlyLogTabs') {
     setupMonthlyLogTabs();
@@ -115,6 +117,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
+    if (body.action === 'deleteWorkoutDay') return json(deleteById('Workout_Days', 'WorkoutDayID', body.payload && body.payload.WorkoutDayID));
     var sheetName = LOG_SHEETS[body.action];
     if (!sheetName) return json({ ok: false, error: 'Unknown action: ' + body.action });
 
@@ -148,6 +151,32 @@ function doPost(e) {
     return json({ ok: true });
   } catch (err) {
     return json({ ok: false, error: String(err) });
+  }
+}
+
+function deleteById(sheetName, idHeader, idValue) {
+  if (!idValue) return { ok: false, error: 'Missing ' + idHeader };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sh = ss.getSheetByName(sheetName);
+    if (!sh) return { ok: false, error: 'Missing tab: ' + sheetName + '. Run setupSheet().' };
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    var idCol = headers.indexOf(idHeader) + 1;
+    if (idCol <= 0) return { ok: false, error: 'Missing header: ' + idHeader };
+    var last = sh.getLastRow();
+    if (last <= 1) return { ok: true, deleted: false };
+    var values = sh.getRange(2, idCol, last - 1, 1).getValues();
+    for (var i = values.length - 1; i >= 0; i--) {
+      if (String(values[i][0]) === String(idValue)) {
+        sh.deleteRow(i + 2);
+        return { ok: true, deleted: true };
+      }
+    }
+    return { ok: true, deleted: false };
+  } finally {
+    lock.releaseLock();
   }
 }
 
