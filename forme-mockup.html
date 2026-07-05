@@ -131,7 +131,6 @@ header { display: flex; align-items: flex-start; justify-content: space-between;
 }
 .profile .who { text-align: right; line-height: 1.15; }
 .profile .name { font-family: var(--serif); font-weight: 600; font-size: 0.95rem; }
-.profile .lvl { font-size: 0.56rem; letter-spacing: 0.22em; font-weight: 600; color: var(--ink-mute); }
 .avatar {
   width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
   font-family: var(--serif); font-weight: 600; color: #EAF3E9; font-size: 0.95rem;
@@ -158,17 +157,6 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 11vw,
 .swatch-card .code b { display: block; font-size: 0.62rem; letter-spacing: 0.02em; color: var(--ink); }
 .swatch-card .focus-line { font-size: 0.72rem; font-weight: 600; line-height: 1.25; margin-top: 5px; }
 .swatch-card .focus-eyebrow { font-size: 0.52rem; letter-spacing: 0.26em; font-weight: 700; color: var(--sage-deep); margin-top: 7px; }
-
-/* today's palette — mini pantone chips */
-.palette { display: flex; gap: 8px; margin: 16px 0 20px; }
-.chip-swatch {
-  flex: 1; background: #FDFBF4; border-radius: 8px; padding: 5px;
-  box-shadow: 0 1px 2px rgba(56,47,30,0.1), 0 5px 10px -6px rgba(56,47,30,0.2);
-  border: 1px solid rgba(38,40,31,0.05);
-}
-.chip-swatch i { display: block; height: 26px; border-radius: 4px; }
-.chip-swatch em { font-style: normal; display: block; font-size: 0.53rem; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-soft); padding: 4px 3px 1px; }
-.chip-swatch em b { color: var(--ink); letter-spacing: 0.08em; }
 
 /* ---------- workout selector rail ---------- */
 .rail {
@@ -402,7 +390,6 @@ nav button.on {
     <div class="profile">
       <div class="who">
         <div class="name">Azhar</div>
-        <div class="lvl">LEVEL 12</div>
       </div>
       <div class="avatar glaze">A</div>
       <i data-lucide="chevron-down"></i>
@@ -421,12 +408,6 @@ nav button.on {
       <div class="focus-eyebrow">FOCUS</div>
       <div class="focus-line">Strength &amp; Stability</div>
     </aside>
-  </div>
-
-  <div class="palette">
-    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#7FA98B,#52815F)"></i><em><b>18-0625</b> Willow</em></div>
-    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#E5A483,#BC5F49)"></i><em><b>16-1441</b> Clay</em></div>
-    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#9CC4C7,#5E8E96)"></i><em><b>17-4911</b> Pool</em></div>
   </div>
 
   <div class="rail">
