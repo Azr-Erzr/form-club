@@ -26,11 +26,10 @@
   --ink-mute: #8A8B7A;
 
   /* the collection */
-  --jade-950: #0F3323;
-  --jade-800: #17472F;
-  --jade-600: #24634212;
-  --jade: #1E5A3D;
-  --jade-hi: #3E8A61;
+  --jade-950: #1F5636;
+  --jade-800: #2C7048;
+  --jade: #35845A;
+  --jade-hi: #5FA87B;
   --jade-glaze: #A9C9B2;
   --sage: #B4C29C;
   --sage-deep: #7E9169;
@@ -62,14 +61,18 @@
 body {
   font-family: var(--sans);
   color: var(--ink);
+  background: var(--paper);
+  line-height: 1.45;
+  font-weight: 400;
+}
+/* paper texture as a fixed overlay — background-attachment:fixed janks iOS Safari */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
     var(--noise),
     repeating-linear-gradient(90deg, rgba(38,40,31,0.028) 0 1px, transparent 1px 44px),
     repeating-linear-gradient(0deg, rgba(38,40,31,0.028) 0 1px, transparent 1px 44px),
     linear-gradient(180deg, #F5F0E3, var(--paper) 240px);
-  background-attachment: fixed;
-  line-height: 1.45;
-  font-weight: 400;
 }
 
 #page { max-width: 480px; margin: 0 auto; padding: 18px 18px 130px; }
@@ -100,11 +103,12 @@ body {
     repeating-linear-gradient(99deg, transparent 0 21px, rgba(10, 30, 20, 0.12) 21px 22px, transparent 22px 60px);
 }
 
-/* wood grain rail */
-.wood {
-  background:
-    repeating-linear-gradient(92deg, rgba(50, 33, 16, 0.22) 0 2px, transparent 2px 9px, rgba(255, 230, 190, 0.09) 9px 11px, transparent 11px 26px),
-    linear-gradient(180deg, #96754F, var(--wood) 45%, var(--wood-deep));
+/* glazed-tile crackle for large green surfaces */
+.crackle {
+  background-image:
+    repeating-linear-gradient(23deg, transparent 0 26px, rgba(255,255,255,0.13) 26px 26.8px, transparent 26.8px 61px),
+    repeating-linear-gradient(113deg, transparent 0 34px, rgba(255,255,255,0.09) 34px 34.7px, transparent 34.7px 80px),
+    repeating-linear-gradient(67deg, transparent 0 47px, rgba(12, 45, 28, 0.12) 47px 47.8px, transparent 47.8px 99px);
 }
 
 /* ---------- header ---------- */
@@ -194,29 +198,34 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 11vw,
 .rail .more { width: 40px; display: grid; place-items: center; padding: 11px 0; }
 .rail .more svg { width: 16px; height: 16px; }
 
-/* ---------- action tiles (glazed ceramic chips) ---------- */
-.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+/* ---------- action row: small glazed keycaps, labels beneath ---------- */
+.actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 20px; }
 .act {
-  font-family: var(--sans); border: 0; cursor: pointer;
-  display: flex; align-items: center; gap: 10px; justify-content: center;
-  padding: 15px 10px; border-radius: 13px; font-size: 0.86rem; font-weight: 600; color: var(--ink);
-  box-shadow: inset 0 1.5px 1px rgba(255,255,255,0.65), inset 0 -3px 5px rgba(46, 42, 26, 0.14),
-              0 2px 3px rgba(56,47,30,0.14), 0 8px 14px -8px rgba(56,47,30,0.3);
+  font-family: var(--sans); border: 0; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  font-size: 0.58rem; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-soft);
 }
-.act:active { box-shadow: inset 0 3px 6px rgba(46,42,26,0.25); transform: translateY(1px); }
-.act svg { width: 17px; height: 17px; }
-.act.sage  { background: linear-gradient(170deg, #D5DEC2, var(--sage)); }
-.act.peach { background: linear-gradient(170deg, var(--peach-soft), var(--peach)); }
-.act.cream { background: linear-gradient(170deg, #F8F2DF, #E8D9B4); }
-.act.pool  { background: linear-gradient(170deg, #CFE4E5, var(--pool)); }
-.act.lilac { background: linear-gradient(170deg, #E4DDEE, var(--lilac)); }
+.act .key {
+  width: 47px; height: 44px; border-radius: 13px; display: grid; place-items: center;
+  color: var(--ink);
+  box-shadow: inset 0 1.5px 1.5px rgba(255,255,255,0.75), inset 0 -3px 5px rgba(46, 42, 26, 0.2),
+              0 2.5px 0 rgba(46, 42, 26, 0.18), 0 6px 10px -5px rgba(56,47,30,0.35);
+}
+.act:active .key { box-shadow: inset 0 3px 6px rgba(46,42,26,0.3); transform: translateY(1.5px); }
+.act .key svg { width: 18px; height: 18px; }
+.act .key.sage  { background: linear-gradient(170deg, #D5DEC2, var(--sage)); }
+.act .key.peach { background: linear-gradient(170deg, var(--peach-soft), var(--peach)); }
+.act .key.cream { background: linear-gradient(170deg, #F8F2DF, #E8D9B4); }
+.act .key.pool  { background: linear-gradient(170deg, #CFE4E5, var(--pool)); }
+.act .key.lilac { background: linear-gradient(170deg, #E4DDEE, var(--lilac)); }
 
 /* ---------- guardrail: jade marble bar ---------- */
 .guard {
   display: flex; align-items: center; gap: 11px;
-  color: #EAF3E9; border-radius: 14px; padding: 13px 13px 13px 16px; margin-bottom: 20px;
-  background: linear-gradient(120deg, var(--jade-800), var(--jade) 45%, var(--jade-950));
-  box-shadow: inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -5px 10px rgba(0,0,0,0.3), var(--shadow-pop);
+  color: #F2F8F0; border-radius: 14px; padding: 13px 13px 13px 16px; margin-bottom: 20px;
+  background: linear-gradient(115deg, #5C9E75, var(--jade) 48%, var(--jade-800));
+  box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.5), inset 0 -4px 8px rgba(12, 45, 28, 0.28),
+              0 2px 4px rgba(35, 70, 50, 0.22), 0 10px 18px -8px rgba(35, 70, 50, 0.4);
   font-size: 0.84rem; font-weight: 500;
 }
 .guard svg { width: 18px; height: 18px; flex: 0 0 auto; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4)); }
@@ -256,7 +265,10 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 11vw,
   border: 1px solid rgba(38,40,31,0.09);
   box-shadow: inset 0 3px 7px rgba(56,47,30,0.14), 0 1px 0 rgba(255,255,255,0.8);
 }
-.fig svg.figure { display: block; width: 100%; height: 108px; padding: 12px 10px 6px; }
+.fig img.figure {
+  display: block; width: 100%; height: 112px; object-fit: cover; object-position: center 22%;
+  mix-blend-mode: multiply; filter: sepia(0.22) saturate(0.82) contrast(0.97);
+}
 .fig .tiles {
   height: 22px;
   background:
@@ -341,13 +353,10 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 11vw,
             --ac-t1: #E5A483; --ac-t2: #BC5F49; --ac-t3: #EFBE9E; }
 .ex.pool  { --ac-hi: #8FBDC4; --ac-deep: #40707D;
             --ac-t1: #9CC4C7; --ac-t2: #5E8E96; --ac-t3: #BAD8D6; }
-.ex.jade  .ex-rail {
-  background:
-    repeating-linear-gradient(92deg, rgba(50, 33, 16, 0.22) 0 2px, transparent 2px 9px, rgba(255, 230, 190, 0.09) 9px 11px, transparent 11px 26px),
-    linear-gradient(180deg, #96754F, var(--wood) 45%, var(--wood-deep));
-}
-.ex.terra .ex-rail { background: linear-gradient(120deg, #A0503C, var(--terra) 50%, #8E4231); }
-.ex.pool  .ex-rail { background: linear-gradient(120deg, #4A757F, var(--pool-deep) 55%, #3C616C); }
+.ex.jade  .ex-rail { background: linear-gradient(120deg, #4E9469, var(--jade) 52%, var(--jade-800)); }
+.ex.terra .ex-rail { background: linear-gradient(120deg, #C97757, var(--terra) 52%, #9E4A36); }
+.ex.pool  .ex-rail { background: linear-gradient(120deg, #6FA2AC, var(--pool-deep) 52%, #446E78); }
+.ex-rail { box-shadow: inset 0 1.5px 1.5px rgba(255,255,255,0.35), inset 0 -3px 6px rgba(0,0,0,0.22); }
 
 /* ---------- tab bar ---------- */
 nav {
@@ -415,9 +424,9 @@ nav button.on {
   </div>
 
   <div class="palette">
-    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#7FA98B,#52815F)"></i><em><b>18-0625</b> · Glutes</em></div>
-    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#E5A483,#BC5F49)"></i><em><b>16-1441</b> · Chest</em></div>
-    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#9CC4C7,#5E8E96)"></i><em><b>17-4911</b> · Grip</em></div>
+    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#7FA98B,#52815F)"></i><em><b>18-0625</b> Willow</em></div>
+    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#E5A483,#BC5F49)"></i><em><b>16-1441</b> Clay</em></div>
+    <div class="chip-swatch"><i style="background:linear-gradient(160deg,#9CC4C7,#5E8E96)"></i><em><b>17-4911</b> Pool</em></div>
   </div>
 
   <div class="rail">
@@ -428,14 +437,14 @@ nav button.on {
   </div>
 
   <div class="actions">
-    <button class="act sage glaze"><i data-lucide="sliders-horizontal"></i>Customize today</button>
-    <button class="act peach glaze"><i data-lucide="sparkles"></i>Warm-up</button>
-    <button class="act cream glaze"><i data-lucide="circle-plus"></i>Add exercise</button>
-    <button class="act pool glaze"><i data-lucide="timer"></i>Quick log</button>
-    <button class="act lilac glaze"><i data-lucide="layout-grid"></i>Tools</button>
+    <button class="act"><span class="key sage glaze"><i data-lucide="sliders-horizontal"></i></span>Customize</button>
+    <button class="act"><span class="key peach glaze"><i data-lucide="sparkles"></i></span>Warm-up</button>
+    <button class="act"><span class="key cream glaze"><i data-lucide="circle-plus"></i></span>Add</button>
+    <button class="act"><span class="key pool glaze"><i data-lucide="timer"></i></span>Quick log</button>
+    <button class="act"><span class="key lilac glaze"><i data-lucide="layout-grid"></i></span>Tools</button>
   </div>
 
-  <div class="guard marble glaze">
+  <div class="guard crackle glaze">
     <i data-lucide="shield-check"></i>
     <span>Stop any set if back pain goes above 5/10</span>
     <span class="more-pill">Learn more <i data-lucide="chevron-right"></i></span>
@@ -446,15 +455,8 @@ nav button.on {
     <div class="ex-num glaze">1</div>
     <div class="ex-body">
       <div class="fig">
-        <svg class="figure" viewBox="0 0 100 100" fill="none" stroke="#4C5B45" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="47" cy="18" r="8.5"/>
-          <path d="M47 27 L45 52"/>
-          <path d="M45 52 L30 66 L30 84"/>
-          <path d="M45 52 L60 62 L62 84"/>
-          <path d="M46 34 L28 44"/>
-          <path d="M46 34 L64 40"/>
-          <path d="M14 90 L88 90" stroke-width="2.4" opacity="0.45"/>
-        </svg>
+        <img class="figure" alt="Reverse lunge demonstration" loading="lazy"
+             src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bodyweight_Walking_Lunge/0.jpg">
         <div class="tiles"></div>
       </div>
       <div class="ex-main">
@@ -490,13 +492,8 @@ nav button.on {
     <div class="ex-num glaze">2</div>
     <div class="ex-body">
       <div class="fig">
-        <svg class="figure" viewBox="0 0 100 100" fill="none" stroke="#4C5B45" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="22" cy="52" r="8"/>
-          <path d="M30 57 L58 66 L84 72"/>
-          <path d="M36 59 L34 76"/>
-          <path d="M56 66 L58 78"/>
-          <path d="M14 88 L90 88" stroke-width="2.4" opacity="0.45"/>
-        </svg>
+        <img class="figure" alt="Push-up demonstration" loading="lazy"
+             src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pushups/0.jpg">
         <div class="tiles"></div>
       </div>
       <div class="ex-main">
@@ -518,7 +515,7 @@ nav button.on {
         </div>
       </div>
     </div>
-    <div class="ex-rail marble">
+    <div class="ex-rail">
       <button><i data-lucide="play"></i>Form video</button>
       <button><i data-lucide="list"></i>Details</button>
       <button><i data-lucide="activity"></i>Motion</button>
@@ -532,17 +529,8 @@ nav button.on {
     <div class="ex-num glaze">3</div>
     <div class="ex-body">
       <div class="fig">
-        <svg class="figure" viewBox="0 0 100 100" fill="none" stroke="#4C5B45" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="50" cy="16" r="8.5"/>
-          <path d="M50 25 L50 56"/>
-          <path d="M50 56 L40 86"/>
-          <path d="M50 56 L62 84"/>
-          <path d="M50 32 L34 44 L33 56"/>
-          <path d="M50 32 L66 44 L67 56"/>
-          <rect x="27" y="56" width="12" height="15" rx="2.5" stroke-width="3"/>
-          <rect x="61" y="56" width="12" height="15" rx="2.5" stroke-width="3"/>
-          <path d="M12 92 L88 92" stroke-width="2.4" opacity="0.45"/>
-        </svg>
+        <img class="figure" alt="Farmer carry demonstration" loading="lazy"
+             src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Farmers_Walk/0.jpg">
         <div class="tiles"></div>
       </div>
       <div class="ex-main">
@@ -564,7 +552,7 @@ nav button.on {
         </div>
       </div>
     </div>
-    <div class="ex-rail marble">
+    <div class="ex-rail">
       <button><i data-lucide="play"></i>Form video</button>
       <button><i data-lucide="list"></i>Details</button>
       <button><i data-lucide="activity"></i>Motion</button>
