@@ -163,6 +163,12 @@ select { background-image: none; }
   box-shadow: 0 1px 2px rgba(56,47,30,0.3);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 430px) {
+  .wordmark { gap: 6px; }
+  .wordmark-sub { display: none; }
+  .profilebtn { max-width: 92px; padding-inline: 11px; }
+  .topbar-actions { gap: 2px; }
+}
 
 /* ---------- layout ---------- */
 .view { padding: 4px var(--pad-right) calc(var(--tabbar-h) + 96px) var(--pad-left); }

@@ -597,6 +597,39 @@
     } catch (e) {}
   }
 
+  function markBuildUpdateState(busy) {
+    const btn = $('#updateBtn');
+    if (!btn) return;
+    btn.classList.toggle('busy', !!busy);
+    btn.disabled = !!busy;
+    btn.title = busy ? 'Refreshing app build...' : 'Refresh app build';
+  }
+
+  async function refreshAppBuild() {
+    markBuildUpdateState(true);
+    toast('Checking for the newest app build...', 'refresh-cw');
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.register('sw.js');
+        if (reg) {
+          await reg.update();
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(k => /^forme-v/i.test(k)).map(k => caches.delete(k)));
+      }
+      sessionStorage.setItem('ef_build_refresh', String(Date.now()));
+      const url = new URL(location.href);
+      url.searchParams.set('build', Date.now().toString(36));
+      location.replace(url.toString());
+    } catch (e) {
+      markBuildUpdateState(false);
+      toast('Could not refresh the app build. Check connection and try again.', 'cloud-off', true);
+    }
+  }
+
   /* ---------------- toasts ---------------- */
 
   function toast(msg, icon, warn) {
@@ -2562,6 +2595,7 @@
   $('#settingsBtn').addEventListener('click', openSettings);
   $('#profileBtn').addEventListener('click', openSettings);
   $('#syncBtn').addEventListener('click', () => fullSync(true));
+  $('#updateBtn').addEventListener('click', refreshAppBuild);
   $('#restSkip').addEventListener('click', stopRest);
   $('#restAdd').addEventListener('click', () => { state.restEnd += 15000; tickRest(); });
   $('#motionFinish').addEventListener('click', finishMotionSet);
@@ -2600,6 +2634,10 @@
     updateProfileBadge();
     await loadCore();
     render();
+    if (sessionStorage.getItem('ef_build_refresh')) {
+      sessionStorage.removeItem('ef_build_refresh');
+      toast('App build refreshed.', 'check-circle-2');
+    }
     refreshRemoteLogs(false);
     syncQueue(false);
     startSyncTimers();

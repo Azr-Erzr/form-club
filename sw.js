@@ -1,7 +1,7 @@
 /* Form — offline shell */
-const VERSION = 'forme-v19';
+const VERSION = 'forme-v20';
 const SHELL = [
-  './', 'index.html', 'styles.css?v=19', 'app.js?v=19', 'config.js?v=19', 'manifest.webmanifest?v=19',
+  './', 'index.html', 'styles.css?v=20', 'app.js?v=20', 'config.js?v=20', 'manifest.webmanifest?v=20',
   'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'data/exercises.csv', 'data/workouts.csv', 'data/workout_days.csv',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
@@ -19,6 +19,10 @@ self.addEventListener('activate', (e) => {
     caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (e) => {
