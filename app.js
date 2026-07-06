@@ -242,6 +242,31 @@
     const u = state.users.find(x => x.UserName === name);
     return (u && u.DisplayName) || name || 'Azhar';
   }
+  function storedSettings() {
+    try { return JSON.parse(localStorage.getItem('ef_settings') || '{}'); } catch (e) { return {}; }
+  }
+  function profilePrefs(name) {
+    const all = lsGet('ef_profile_prefs', {});
+    return all[userKey(name || currentUser())] || {};
+  }
+  function setProfilePref(key, value, name) {
+    const all = lsGet('ef_profile_prefs', {});
+    const k = userKey(name || currentUser());
+    all[k] = all[k] || {};
+    all[k][key] = value;
+    lsSet('ef_profile_prefs', all);
+  }
+  function defaultBackAware(name) {
+    return String(name || currentUser()).toLowerCase() === 'azhar';
+  }
+  function backAware(name) {
+    const prefs = profilePrefs(name);
+    if (Object.prototype.hasOwnProperty.call(prefs, 'backSafe')) return !!prefs.backSafe;
+    const legacy = storedSettings();
+    if (defaultBackAware(name) && Object.prototype.hasOwnProperty.call(legacy, 'backSafe')) return !!legacy.backSafe;
+    return defaultBackAware(name);
+  }
+  function setBackAware(value, name) { setProfilePref('backSafe', !!value, name); }
   function switchProfile(userName, opts) {
     const name = String(userName || '').trim() || 'Azhar';
     if (name === currentUser()) return false;
@@ -1193,7 +1218,7 @@
           '<div class="detailgrid" id="det-' + esc(row.ExerciseID) + '" hidden>' +
             '<label><span class="lbl">Weight lb</span><input type="number" inputmode="decimal" data-detail="weight" data-ex="' + esc(row.ExerciseID) + '" value="' + esc(det.weight || '') + '"></label>' +
             '<label><span class="lbl">Effort 1-10</span><input type="number" inputmode="numeric" min="1" max="10" data-detail="rpe" data-ex="' + esc(row.ExerciseID) + '" value="' + esc(det.rpe || '') + '"></label>' +
-            '<label><span class="lbl">Pain 0-10</span><input type="number" inputmode="numeric" min="0" max="10" data-detail="pain" data-ex="' + esc(row.ExerciseID) + '" value="' + esc(det.pain || '') + '"></label>' +
+            (backAware() ? '<label><span class="lbl">Pain 0-10</span><input type="number" inputmode="numeric" min="0" max="10" data-detail="pain" data-ex="' + esc(row.ExerciseID) + '" value="' + esc(det.pain || '') + '"></label>' : '') +
           '</div>' +
           '<div class="excard-tools">' +
             '<button class="toolbtn" data-action="toggle-video" data-ex="' + esc(row.ExerciseID) + '" data-vid="' + esc(vid) + '" data-name="' + esc(ex.ExerciseName) + '" data-search="' + esc(ex.YouTubeSearchURL || '') + '">' +
@@ -1247,7 +1272,7 @@
         '<button class="toolbtn actiontool" data-action="open-voice-log"><i data-lucide="mic"></i>Quick log</button>' +
         '<button class="toolbtn actiontool" data-action="open-tools"><i data-lucide="calculator"></i>Tools</button>' +
       '</div>' +
-      (workout && workout.BackWarning ? '<div class="guardbar"><i data-lucide="shield-check"></i><span>' + esc(workout.BackWarning) + '</span></div>' : '') +
+      (backAware() && workout && workout.BackWarning ? '<div class="guardbar"><i data-lucide="shield-check"></i><span>' + esc(workout.BackWarning) + '</span></div>' : '') +
       cards +
       '<div class="card mt16 prep-card"><div class="minihead"><span>Pre-workout checklist</span>' +
         (prep.updatedAt ? '<button class="infobtn" data-action="open-time-info" aria-label="Time info"><i data-lucide="info"></i></button>' : '') + '</div>' +
@@ -1271,7 +1296,7 @@
     const diffs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
 
     let list = state.exercises.filter(e => {
-      if (CFG.backSafe && String(e.BackFlag).toLowerCase() === 'red') return false;
+      if (backAware() && String(e.BackFlag).toLowerCase() === 'red') return false;
       if (L.q && !(e.ExerciseName + ' ' + e.PrimaryMuscles + ' ' + e.Equipment + ' ' + e.MovementPattern).toLowerCase().includes(L.q.toLowerCase())) return false;
       if (L.cat !== 'All' && e.Category !== L.cat) return false;
       if (L.place !== 'All') {
@@ -1298,7 +1323,7 @@
       chipRow(places, 'place', L.place) +
       chipRow(diffs, 'diff', L.diff) +
       '<div class="resultcount">' + list.length + ' result' + (list.length === 1 ? '' : 's') +
-        (CFG.backSafe ? ' · back-safe mode on' : '') + '</div>' +
+        (backAware() ? ' · back-safe mode on' : '') + '</div>' +
       list.slice(0, state.lib.limit || 120).map(e =>
         '<button class="libitem" data-action="open-exercise" data-id="' + esc(e.ExerciseID) + '">' +
           '<span class="flag ' + flagClass(e.BackFlag) + '"></span>' +
@@ -1399,8 +1424,8 @@
     const items = [
       { label: 'Three workouts', now: workouts, goal: 3, unit: '' },
       { label: '100 walking minutes', now: Math.round(walkMin), goal: 100, unit: ' min' },
-      { label: 'Two gentle back circuits', now: gentleDays, goal: 2, unit: '' },
     ];
+    if (backAware()) items.push({ label: 'Two gentle back circuits', now: gentleDays, goal: 2, unit: '' });
     return '<div class="card">' + items.map(c => {
       const pct = Math.min(100, Math.round((c.now / c.goal) * 100));
       const done = c.now >= c.goal;
@@ -1474,10 +1499,10 @@
       '<div class="card"><div class="chiprow" style="margin:0">' +
         ladder.map(([id, name]) => '<span class="chip' + (level === name ? ' active' : '') + '">' + name + '</span>').join('') +
       '</div></div>' +
-      '<div class="section-label">Back pain trend</div>' +
+      (backAware() ? '<div class="section-label">Back pain trend</div>' +
       '<div class="card">' + sparkline(painPts.map(p => p.v), 10) +
         (painPts.length ? '<div class="resultcount mt8">' + esc(shortDate(painPts[0].d)) + ' → ' + esc(shortDate(painPts[painPts.length - 1].d)) + '</div>' : '') +
-      '</div>' +
+      '</div>' : '') +
       (friends.length ? '<div class="section-label">The club, this week</div>' +
         '<table class="datatable"><tr><th>Who</th><th class="num">sets</th><th class="num">km</th></tr>' +
         friends.map(([u, s]) => '<tr' + (u === me ? ' class="me"' : '') + '><td>' + esc(displayNameFor(u)) + '</td><td class="num">' + s.sets + '</td><td class="num">' + s.km.toFixed(1) + '</td></tr>').join('') +
@@ -1503,7 +1528,7 @@
         '<label><span class="formlabel">Weight lb</span><input id="jWeight" type="number" inputmode="decimal" placeholder="245"></label>' +
         '<label><span class="formlabel">Sleep hours</span><input id="jSleep" type="number" inputmode="decimal" step="0.5" placeholder="7"></label>' +
         '<label><span class="formlabel">Energy 1-10</span><input id="jEnergy" type="number" inputmode="numeric" min="1" max="10" placeholder="5"></label>' +
-        '<label><span class="formlabel">Back pain 0-10</span><input id="jPain" type="number" inputmode="numeric" min="0" max="10" placeholder="0"></label>' +
+        (backAware() ? '<label><span class="formlabel">Back pain 0-10</span><input id="jPain" type="number" inputmode="numeric" min="0" max="10" placeholder="0"></label>' : '') +
         '<label class="full"><span class="formlabel">Mood</span><select id="jMood">' +
           ['—', 'Great', 'Good', 'Fine', 'Meh', 'Rough'].map(m => '<option>' + m + '</option>').join('') + '</select></label>' +
         '<label class="full"><span class="formlabel">Notes</span><textarea id="jNotes" rows="2" placeholder="What made today easier or harder?"></textarea></label>' +
@@ -1515,7 +1540,7 @@
           '<div class="eyebrow">' + esc(shortDate(j.Date)) + (j.Mood && j.Mood !== '—' ? ' · ' + esc(j.Mood) : '') + '</div>' +
           '<div style="font-size:0.88rem;color:var(--taupe)">' +
             [j.BodyWeight_lb && j.BodyWeight_lb + ' lb', j.SleepHours && j.SleepHours + ' h sleep',
-             j.Energy_1_10 && 'energy ' + j.Energy_1_10, (j.BackPain_0_10 !== '' && j.BackPain_0_10 != null) && 'pain ' + j.BackPain_0_10]
+             j.Energy_1_10 && 'energy ' + j.Energy_1_10, (backAware() && j.BackPain_0_10 !== '' && j.BackPain_0_10 != null) && 'pain ' + j.BackPain_0_10]
             .filter(Boolean).join(' · ') + '</div>' +
           (j.Journal ? '<div class="mt8" style="font-size:0.92rem">' + esc(j.Journal) + '</div>' : '') +
         '</div>').join('')
@@ -1555,7 +1580,7 @@
   function exercisePickerHtml(q) {
     const needle = String(q || '').toLowerCase();
     const list = state.exercises.filter(e => {
-      if (CFG.backSafe && String(e.BackFlag).toLowerCase() === 'red') return false;
+      if (backAware() && String(e.BackFlag).toLowerCase() === 'red') return false;
       const hay = (e.ExerciseName + ' ' + e.PrimaryMuscles + ' ' + e.Equipment + ' ' + e.MovementPattern).toLowerCase();
       return !needle || hay.includes(needle);
     }).slice(0, 36);
@@ -1802,7 +1827,7 @@
       LogID: uid('SET'), UserName: currentUser(), Date: todayStr(),
       ExerciseID: draft.exercise.ExerciseID, ExerciseName: draft.exercise.ExerciseName,
       SetNumber: '', TargetRepsOrTime: '', ActualReps: draft.reps,
-      Weight_lb: draft.weight || '', RPE_1_10: '', Pain_0_10: 0,
+      Weight_lb: draft.weight || '', RPE_1_10: '', Pain_0_10: backAware() ? 0 : '',
       Completed: true, Notes: 'Quick log: ' + phrase, UpdatedAt: new Date().toISOString(),
     };
     if (!priorBest || setScore(rec) > setScore(priorBest)) rec.Notes += ' PR';
@@ -1815,15 +1840,18 @@
 
   function openFinish() {
     const wid = state.workoutId;
+    const painHtml = backAware() ? (
+      '<span class="formlabel mt16" style="display:block;margin-top:16px">Back pain right now</span>' +
+      '<div class="painscale" id="painScale">' +
+        Array.from({ length: 11 }, (_, i) => '<button data-pain="' + i + '"' + (i === 0 ? ' class="sel"' : '') + '>' + i + '</button>').join('') + '</div>'
+    ) : '';
     openModal(
       '<div class="sheet-title">How did it go?</div>' +
       '<div class="sheet-sub">Honest answers steer next week.</div>' +
       '<span class="formlabel">Effort</span>' +
       '<div class="effortrow" id="effortRow">' +
         ['Easy', 'Good', 'Hard'].map(v => '<button data-effort="' + v + '"' + (v === 'Good' ? ' class="sel"' : '') + '>' + v + '</button>').join('') + '</div>' +
-      '<span class="formlabel mt16" style="display:block;margin-top:16px">Back pain right now</span>' +
-      '<div class="painscale" id="painScale">' +
-        Array.from({ length: 11 }, (_, i) => '<button data-pain="' + i + '"' + (i === 0 ? ' class="sel"' : '') + '>' + i + '</button>').join('') + '</div>' +
+      painHtml +
       '<label class="full mt16" style="display:block;margin-top:16px"><span class="formlabel">Notes</span>' +
         '<textarea id="finishNotes" rows="2" placeholder="Optional"></textarea></label>' +
       '<button class="bigbtn mt24" data-action="save-finish" data-wid="' + esc(wid) + '"><i data-lucide="flag"></i>Log it</button>'
@@ -1851,8 +1879,8 @@
       '<button class="bigbtn subtle mt16" data-action="open-add-profile"><i data-lucide="user-plus"></i>Add profile</button>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Google Sheet ID</span><input id="setSheet" placeholder="1AbC…" value="' + esc(CFG.sheetId) + '"></label>' +
       '<label class="mt16" style="display:block;margin-top:14px"><span class="formlabel">Apps Script web app URL</span><input id="setScript" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(CFG.scriptUrl) + '"></label>' +
-      '<div class="kv mt16" style="border-bottom:none;align-items:center;margin-top:10px"><span class="k">Back-safe</span>' +
-        '<span class="v"><button class="chip' + (CFG.backSafe ? ' active' : '') + '" data-action="toggle-backsafe">' + (CFG.backSafe ? 'Hiding red-flag exercises' : 'Showing everything') + '</button></span></div>' +
+      '<div class="kv mt16" style="border-bottom:none;align-items:center;margin-top:10px"><span class="k">Back-safe for ' + esc(displayNameFor(currentUser())) + '</span>' +
+        '<span class="v"><button class="chip' + (backAware() ? ' active' : '') + '" data-action="toggle-backsafe">' + (backAware() ? 'Hiding red-flag exercises' : 'Showing everything') + '</button></span></div>' +
       '<div class="chiprow" style="margin:6px 0 0">' +
         '<button class="chip' + (CFG.timerSound ? ' active' : '') + '" data-action="toggle-setting" data-key="timerSound"><i data-lucide="volume-2"></i>Sound</button>' +
         '<button class="chip' + (CFG.timerVibrate ? ' active' : '') + '" data-action="toggle-setting" data-key="timerVibrate"><i data-lucide="smartphone"></i>Haptics</button>' +
@@ -1884,23 +1912,24 @@
     const ex = exById(exId) || {};
     const det = sess.details[exId] || {};
     const st = (sess.sets[exId] || [])[i] || { count: 0 };
-    const pain = Number(det.pain || 0);
+    const aware = backAware();
+    const pain = aware ? Number(det.pain || 0) : 0;
     const priorBest = previousBestFor(exId);
     const rec = {
       LogID: uid('SET'), UserName: currentUser(), Date: todayStr(),
       ExerciseID: exId, ExerciseName: ex.ExerciseName || exId,
       SetNumber: i + 1, TargetRepsOrTime: wdRow ? wdRow.TargetRepsOrTime : '',
       ActualReps: st.count, Weight_lb: det.weight || '', RPE_1_10: det.rpe || '',
-      Pain_0_10: det.pain || 0, Completed: true, Notes: '', UpdatedAt: new Date().toISOString(),
+      Pain_0_10: aware ? (det.pain || 0) : '', Completed: true, Notes: '', UpdatedAt: new Date().toISOString(),
     };
     const isPr = Number(rec.ActualReps || 0) > 0 && (!priorBest || setScore(rec) > setScore(priorBest));
     if (isPr) rec.Notes = 'PR';
     const logs = lsGet('ef_setlogs', []); logs.push(rec); lsSet('ef_setlogs', logs);
     post('appendExerciseLog', rec).then(ok => updateSyncBadge());
     if (isPr) toast('New PR: ' + (ex.ExerciseName || exId) + ' - ' + formatSetLine(rec), 'trophy');
-    if (pain >= 6) {
+    if (aware && pain >= 6) {
       toast('Pain ' + pain + '/10 — stop this movement. Try ' + (ex.Regression || 'an easier version') + ' instead.', 'octagon-alert', true);
-    } else if (pain === 5) {
+    } else if (aware && pain === 5) {
       toast('Pain 5/10 — hold this level, no progression today.', 'shield', true);
     }
   }
@@ -1927,11 +1956,12 @@
   }
 
   function saveJournal() {
+    const aware = backAware();
     const rec = {
       EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
       Mood: $('#jMood').value === '—' ? '' : $('#jMood').value,
       Energy_1_10: $('#jEnergy').value || '', SleepHours: $('#jSleep').value || '',
-      BackPain_0_10: $('#jPain').value || '', BodyWeight_lb: $('#jWeight').value || '',
+      BackPain_0_10: aware ? (($('#jPain') || {}).value || '') : '', BodyWeight_lb: $('#jWeight').value || '',
       CaloriesEstimate: '', ProteinEstimate_g: '',
       Journal: $('#jNotes').value || '', UpdatedAt: new Date().toISOString(),
     };
@@ -2194,11 +2224,12 @@
     else if (a === 'finish') { openFinish(); }
     else if (a === 'save-finish') {
       const effort = ($('#effortRow .sel') || {}).dataset ? $('#effortRow .sel').dataset.effort : 'Good';
-      const pain = Number((($('#painScale .sel') || {}).dataset || {}).pain || 0);
+      const aware = backAware();
+      const pain = aware ? Number((($('#painScale .sel') || {}).dataset || {}).pain || 0) : '';
       const notes = $('#finishNotes').value || '';
       const rec = {
         EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
-        Mood: '', Energy_1_10: '', SleepHours: '', BackPain_0_10: pain, BodyWeight_lb: '',
+        Mood: '', Energy_1_10: '', SleepHours: '', BackPain_0_10: aware ? pain : '', BodyWeight_lb: '',
         CaloriesEstimate: '', ProteinEstimate_g: '',
         Journal: 'Workout ' + (state.workoutId || '') + ' finished. Effort: ' + effort + (notes ? '. ' + notes : ''),
         UpdatedAt: new Date().toISOString(),
@@ -2206,8 +2237,8 @@
       const logs = lsGet('ef_journal', []); logs.push(rec); lsSet('ef_journal', logs);
       post('appendJournal', rec).then(() => updateSyncBadge());
       closeModal();
-      if (pain >= 6) toast('Pain ' + pain + '/10 — next session will be lighter. Rest well.', 'octagon-alert', true);
-      else if (pain === 5) toast('Pain 5/10 — hold this level next time. Still a win.', 'shield', true);
+      if (aware && pain >= 6) toast('Pain ' + pain + '/10 — next session will be lighter. Rest well.', 'octagon-alert', true);
+      else if (aware && pain === 5) toast('Pain 5/10 — hold this level next time. Still a win.', 'shield', true);
       else toast('Workout logged. See you next time.', 'flag');
       stopRest();
     }
@@ -2224,9 +2255,11 @@
     else if (a === 'close-modal') { closeModal(); }
 
     else if (a === 'toggle-backsafe') {
-      saveSettings({ backSafe: !CFG.backSafe });
-      btn.classList.toggle('active', CFG.backSafe);
-      btn.textContent = CFG.backSafe ? 'Hiding red-flag exercises' : 'Showing everything';
+      setBackAware(!backAware());
+      btn.classList.toggle('active', backAware());
+      btn.textContent = backAware() ? 'Hiding red-flag exercises' : 'Showing everything';
+      toast((backAware() ? 'Enabled' : 'Disabled') + ' back-safe mode for ' + displayNameFor(currentUser()) + '.', 'shield');
+      render();
     }
     else if (a === 'toggle-setting') {
       const key = btn.dataset.key;
