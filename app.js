@@ -86,6 +86,12 @@
     const t = d || new Date();
     return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
   }
+  function addDays(date, n) {
+    const d = date ? new Date(date) : new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
   function niceDate(d) {
     return (d || new Date()).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   }
@@ -94,6 +100,10 @@
     const d = new Date(String(iso).slice(0, 10) + 'T12:00:00');
     if (isNaN(d)) return String(iso).slice(0, 10);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  function dayNameShort(iso) {
+    const d = new Date(String(iso || todayStr()).slice(0, 10) + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short' });
   }
   function uid(prefix) {
     return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
@@ -734,12 +744,78 @@
   function getPrep(date) { return lsGet(prepKey(date), { items: {}, updatedAt: '' }); }
   function setPrep(prep, date) { lsSet(prepKey(date), prep); }
 
-  function suggestedWorkoutId() {
+  function weeklyWorkoutMap() {
+    return { 1: 'HOME_A', 2: 'MIN_DAY', 3: 'HOME_B', 4: 'BACK_RESET', 5: 'HOME_A', 6: 'HOME_B', 0: 'MIN_DAY' };
+  }
+  function scheduledWorkoutIdForDate(date, mine) {
+    const plans = mine || profileWorkouts();
+    if (!plans.length) return '';
+    const dow = (date || new Date()).getDay();
+    const mapped = weeklyWorkoutMap()[dow];
+    if (plans.some(w => w.WorkoutID === mapped)) return mapped;
+    const idx = ((dow + 6) % 7) % plans.length;
+    return (plans[idx] || plans[0]).WorkoutID;
+  }
+  function suggestedWorkoutId(date) {
     const mine = profileWorkouts();
-    const dow = new Date().getDay(); // 0 Sun
-    const map = { 1: 'HOME_A', 2: 'MIN_DAY', 3: 'HOME_B', 4: 'BACK_RESET', 5: 'HOME_A', 6: 'HOME_B', 0: 'MIN_DAY' };
-    const id = map[dow];
-    return mine.some(w => w.WorkoutID === id) ? id : (mine[0] || {}).WorkoutID;
+    return scheduledWorkoutIdForDate(date || new Date(), mine) || (mine[0] || {}).WorkoutID;
+  }
+  function nextRoutineDate(wid, mine, fallbackIndex) {
+    const plans = mine || profileWorkouts();
+    for (let i = 0; i < 21; i++) {
+      const d = addDays(new Date(), i);
+      if (scheduledWorkoutIdForDate(d, plans) === wid) return todayStr(d);
+    }
+    return todayStr(addDays(new Date(), Math.max(0, fallbackIndex || 0)));
+  }
+  function dayStatusKey(name) { return 'ef_day_status_' + userKey(name || currentUser()); }
+  function dayStatuses(name) { return lsGet(dayStatusKey(name), {}); }
+  function setDayStatus(date, wid, status) {
+    const all = dayStatuses();
+    all[date] = { WorkoutID: wid || '', status, UpdatedAt: new Date().toISOString() };
+    lsSet(dayStatusKey(), all);
+  }
+  function journalStatusForDate(date, wid) {
+    const rows = allJournal().filter(j => j.UserName === currentUser() && String(j.Date || '').slice(0, 10) === date);
+    const needle = wid ? String(wid).toLowerCase() : '';
+    if (rows.some(j => String(j.Journal || '').toLowerCase().includes('skipped') && (!needle || String(j.Journal || '').toLowerCase().includes(needle)))) return 'skipped';
+    if (rows.some(j => String(j.Journal || '').toLowerCase().includes('finished') && (!needle || String(j.Journal || '').toLowerCase().includes(needle)))) return 'done';
+    return '';
+  }
+  function hasActivityOn(date) {
+    return allSets().some(s => s.UserName === currentUser() && String(s.Date || '').slice(0, 10) === date && s.Completed) ||
+      allRuns().some(r => r.UserName === currentUser() && String(r.Date || '').slice(0, 10) === date);
+  }
+  function routineDayStatus(date, wid) {
+    const cached = dayStatuses()[date];
+    if (cached && cached.status !== 'missed') return cached.status;
+    const fromJournal = journalStatusForDate(date, wid);
+    if (fromJournal) return fromJournal;
+    if (hasActivityOn(date)) return 'done';
+    if (cached && cached.status === 'missed') return 'missed';
+    if (date < todayStr() && wid) return 'missed';
+    if (date === todayStr()) return 'today';
+    return 'upcoming';
+  }
+  function cacheMissedDays(days) {
+    const mine = profileWorkouts();
+    if (!mine.length) return;
+    const all = dayStatuses();
+    let changed = false;
+    const start = addDays(new Date(), -(days || 28) + 1);
+    for (let i = 0; i < (days || 28); i++) {
+      const date = todayStr(addDays(start, i));
+      if (date >= todayStr() || all[date]) continue;
+      const wid = scheduledWorkoutIdForDate(new Date(date + 'T12:00:00'), mine);
+      if (wid && !journalStatusForDate(date, wid) && !hasActivityOn(date)) {
+        all[date] = { WorkoutID: wid, status: 'missed', UpdatedAt: new Date().toISOString() };
+        changed = true;
+      }
+    }
+    if (changed) lsSet(dayStatusKey(), all);
+  }
+  function statusLabel(status) {
+    return status === 'done' ? 'Hit' : status === 'missed' ? 'Missed' : status === 'skipped' ? 'Skipped' : status === 'today' ? 'Today' : 'Planned';
   }
 
   function repsDefault(target) {
@@ -1132,10 +1208,14 @@
       '<button class="chip schedule-edit-toggle' + (state.scheduleEdit ? ' active' : '') + '" data-action="toggle-schedule-edit">' +
         (state.scheduleEdit ? 'Done' : 'Edit') + '</button></div>';
     if (!state.scheduleEdit) {
-      return title + '<div class="chiprow schedule-row">' + mine.map(w =>
-        '<button class="chip' + (w.WorkoutID === wid ? ' active' : '') + '" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
-        esc(w.WorkoutName) + (w.WorkoutID === sugg && w.WorkoutID !== wid ? '<span class="sug">suggested</span>' : '') + '</button>'
-      ).join('') + '</div>';
+      return title + '<div class="chiprow schedule-row">' + mine.map((w, i) => {
+        const date = nextRoutineDate(w.WorkoutID, mine, i);
+        const status = routineDayStatus(date, w.WorkoutID);
+        return '<button class="chip schedule-chip status-' + esc(status) + (w.WorkoutID === wid ? ' active' : '') + '" data-action="pick-workout" data-id="' + esc(w.WorkoutID) + '">' +
+          '<span class="chip-name">' + esc(w.WorkoutName) + '</span>' +
+          '<span class="chip-date">' + esc(date === todayStr() ? 'Today' : dayNameShort(date) + ' ' + shortDate(date)) + ' · ' + esc(statusLabel(status)) + '</span>' +
+          (w.WorkoutID === sugg && w.WorkoutID !== wid ? '<span class="sug">suggested</span>' : '') + '</button>';
+      }).join('') + '</div>';
     }
     return title + '<div class="schedule-edit-list">' + mine.map((w, i) =>
       '<div class="schedule-edit-item' + (w.WorkoutID === wid ? ' active' : '') + '" draggable="true" data-workout-id="' + esc(w.WorkoutID) + '">' +
@@ -1285,7 +1365,8 @@
       '<div class="card mt16"><label class="full"><span class="formlabel">Today\'s notes</span>' +
         '<textarea id="dayNotes" rows="3" placeholder="How this workout felt, swaps, reminders for next time...">' + esc((latestDayNote() || {}).Journal || '') + '</textarea></label>' +
         '<button class="bigbtn subtle mt16" data-action="save-day-note"><i data-lucide="notebook-pen"></i>Save note</button></div>' +
-      '<button class="bigbtn mt16" data-action="finish"><i data-lucide="flag"></i>Finish workout</button>'
+      '<button class="bigbtn mt16" data-action="finish"><i data-lucide="flag"></i>Finish workout</button>' +
+      '<button class="bigbtn ghost mt8" data-action="skip-workout"><i data-lucide="calendar-x"></i>Mark skipped</button>'
     );
   }
 
@@ -1436,6 +1517,35 @@
     }).join('') + '</div>';
   }
 
+  function routineCalendarHtml(days) {
+    const mine = profileWorkouts();
+    if (!mine.length) return '';
+    cacheMissedDays(days || 28);
+    const start = addDays(new Date(), -(days || 28) + 1);
+    const cells = [];
+    for (let i = 0; i < (days || 28); i++) {
+      const date = todayStr(addDays(start, i));
+      const wid = scheduledWorkoutIdForDate(new Date(date + 'T12:00:00'), mine);
+      const workout = mine.find(w => w.WorkoutID === wid) || {};
+      const status = routineDayStatus(date, wid);
+      cells.push(
+        '<button class="calday status-' + esc(status) + '" data-action="pick-calendar-day" data-id="' + esc(wid) + '" data-date="' + esc(date) + '">' +
+          '<span class="caldow">' + esc(dayNameShort(date)) + '</span>' +
+          '<span class="calnum">' + esc(String(new Date(date + 'T12:00:00').getDate())) + '</span>' +
+          '<span class="calstatus">' + esc(statusLabel(status)) + '</span>' +
+          '<span class="calroutine">' + esc(workout.WorkoutName || 'Routine') + '</span>' +
+        '</button>'
+      );
+    }
+    const done = cells.filter(x => x.includes('status-done')).length;
+    const missed = cells.filter(x => x.includes('status-missed')).length;
+    return '<div class="routine-calendar card">' +
+      '<div class="calendar-summary"><span><b>' + done + '</b> hit</span><span><b>' + missed + '</b> missed</span><span>Last ' + (days || 28) + ' days</span></div>' +
+      '<div class="calgrid">' + cells.join('') + '</div>' +
+      '<div class="resultcount mt8">Tap a day to open that routine. Missed days are inferred when a scheduled day passes with no saved activity.</div>' +
+    '</div>';
+  }
+
   function renderProgress() {
     const ws = weekStart();
     const sets = allSets();
@@ -1495,6 +1605,8 @@
         (statRows.length > 1 ? '<div class="resultcount mt8">' + statRows.length + ' updates saved</div>' : '') + '</div>' : '') +
       '<div class="section-label">This week’s challenges</div>' +
       renderChallenges(mySets, myRuns, ws) +
+      '<div class="section-label">Workout calendar</div>' +
+      routineCalendarHtml(28) +
       '<div class="section-label">Push-up ladder</div>' +
       '<div class="card"><div class="chiprow" style="margin:0">' +
         ladder.map(([id, name]) => '<span class="chip' + (level === name ? ' active' : '') + '">' + name + '</span>').join('') +
@@ -2099,6 +2211,15 @@
     updateProfileBadge();
     updateSyncBadge();
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
+    centerActiveSchedule();
+  }
+  function centerActiveSchedule() {
+    if (state.tab !== 'today') return;
+    requestAnimationFrame(() => {
+      const row = $('.schedule-row');
+      const active = row && row.querySelector('.chip.active');
+      if (active) active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    });
   }
 
   document.addEventListener('click', async (ev) => {
@@ -2117,6 +2238,7 @@
     const wid = state.workoutId;
 
     if (a === 'pick-workout') { state.workoutId = btn.dataset.id; render(); }
+    else if (a === 'pick-calendar-day') { state.tab = 'today'; state.workoutId = btn.dataset.id; history.replaceState(null, '', '#today'); window.scrollTo(0, 0); render(); }
     else if (a === 'toggle-schedule-edit') { state.scheduleEdit = !state.scheduleEdit; render(); }
     else if (a === 'open-new-workout') { openNewWorkout(); }
     else if (a === 'save-new-workout') { saveNewWorkout(); }
@@ -2236,11 +2358,28 @@
       };
       const logs = lsGet('ef_journal', []); logs.push(rec); lsSet('ef_journal', logs);
       post('appendJournal', rec).then(() => updateSyncBadge());
+      setDayStatus(todayStr(), state.workoutId, 'done');
       closeModal();
       if (aware && pain >= 6) toast('Pain ' + pain + '/10 — next session will be lighter. Rest well.', 'octagon-alert', true);
       else if (aware && pain === 5) toast('Pain 5/10 — hold this level next time. Still a win.', 'shield', true);
       else toast('Workout logged. See you next time.', 'flag');
       stopRest();
+      render();
+    }
+    else if (a === 'skip-workout') {
+      if (!state.workoutId) { toast('Pick a routine first.', 'circle-alert', true); return; }
+      setDayStatus(todayStr(), state.workoutId, 'skipped');
+      const rec = {
+        EntryID: uid('JRN'), UserName: currentUser(), Date: todayStr(),
+        Mood: 'Skip', Energy_1_10: '', SleepHours: '', BackPain_0_10: '', BodyWeight_lb: '',
+        CaloriesEstimate: '', ProteinEstimate_g: '',
+        Journal: 'Workout ' + state.workoutId + ' skipped.',
+        UpdatedAt: new Date().toISOString(),
+      };
+      const logs = lsGet('ef_journal', []); logs.push(rec); lsSet('ef_journal', logs);
+      post('appendJournal', rec).then(() => updateSyncBadge());
+      toast('Marked today as skipped.', 'calendar-x');
+      render();
     }
 
     else if (a === 'open-exercise') { openExercise(btn.dataset.id); }

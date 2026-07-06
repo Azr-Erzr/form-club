@@ -255,6 +255,30 @@ select { background-image: none; }
   box-shadow: inset 0 1px 1px rgba(255,255,255,0.7), 0 1px 2px rgba(0,0,0,0.25);
 }
 .chip svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
+.schedule-chip {
+  min-width: 132px; min-height: 48px; border-radius: 18px;
+  display: grid; gap: 2px; justify-items: start; align-content: center;
+  border: 1px solid transparent; text-align: left;
+}
+.schedule-chip .chip-name {
+  max-width: 112px; overflow: hidden; text-overflow: ellipsis;
+}
+.schedule-chip .chip-date {
+  font-size: 0.62rem; color: var(--ink-mute); letter-spacing: 0.04em;
+}
+.schedule-chip.active .chip-date { color: rgba(255,255,255,0.82); }
+.schedule-chip.status-done:not(.active) {
+  border-color: rgba(53,132,90,0.34);
+  background: linear-gradient(180deg, #E5EFDF, #D6E6CC);
+}
+.schedule-chip.status-missed:not(.active) {
+  border-color: rgba(180,73,61,0.34);
+  background: linear-gradient(180deg, #F6DED7, #E9C5BA);
+}
+.schedule-chip.status-skipped:not(.active) {
+  border-color: rgba(170,125,64,0.34);
+  background: linear-gradient(180deg, #F2E4C9, #E7D2A9);
+}
 
 /* ---------- schedule editor ---------- */
 .schedule-head {
@@ -264,6 +288,10 @@ select { background-image: none; }
 .schedule-head .section-label { margin: 0 0 3px; }
 .schedule-edit-toggle { flex: 0 0 auto; }
 .schedule-row { margin-bottom: 12px; }
+.schedule-row::before,
+.schedule-row::after {
+  content: ""; flex: 0 0 calc(50% - 66px);
+}
 .schedule-edit-list { display: grid; gap: 8px; margin: 0 0 14px; }
 .schedule-edit-item,
 .schedule-add-row {
@@ -315,6 +343,57 @@ select { background-image: none; }
   box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), 0 2px 5px rgba(35,90,60,0.35);
 }
 .ios-add svg { width: 19px; height: 19px; stroke-width: 3; }
+
+/* ---------- progress calendar ---------- */
+.routine-calendar { padding: 14px; }
+.calendar-summary {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  color: var(--ink-soft); font-size: 0.78rem;
+}
+.calendar-summary span {
+  border: 1px solid var(--hairline-soft); border-radius: 999px;
+  background: rgba(255,255,255,0.38); padding: 6px 10px;
+}
+.calendar-summary b { color: var(--ink); font-weight: 700; }
+.calgrid {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;
+}
+.calday {
+  min-width: 0; min-height: 74px; border-radius: 12px;
+  border: 1px solid var(--hairline-soft); padding: 7px 4px;
+  display: grid; justify-items: center; align-content: start; gap: 2px;
+  color: var(--ink-soft); background: var(--card-warm);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), 0 1px 2px rgba(56,47,30,0.08);
+}
+.caldow { font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.calnum { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; color: var(--ink); line-height: 1; }
+.calstatus { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.calroutine {
+  width: 100%; font-size: 0.52rem; line-height: 1.05; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.calday.status-done {
+  background: linear-gradient(160deg, #2F7E56, #17452F);
+  border-color: rgba(47,126,86,0.55); color: #F4F6E8;
+}
+.calday.status-done .calnum,
+.calday.status-done .caldow { color: #F4F6E8; }
+.calday.status-missed {
+  background: linear-gradient(160deg, #D86D5F, #9C342E);
+  border-color: rgba(156,52,46,0.55); color: #FFF3EC;
+}
+.calday.status-missed .calnum,
+.calday.status-missed .caldow { color: #FFF3EC; }
+.calday.status-skipped {
+  background: linear-gradient(160deg, #D9B46F, #9A6B32);
+  border-color: rgba(154,107,50,0.5); color: #FFF9E9;
+}
+.calday.status-skipped .calnum,
+.calday.status-skipped .caldow { color: #FFF9E9; }
+.calday.status-today {
+  border-color: rgba(53,132,90,0.5);
+  box-shadow: inset 0 0 0 1px rgba(53,132,90,0.2), 0 2px 6px rgba(56,47,30,0.12);
+}
 
 /* ---------- flags ---------- */
 .flag { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), 0 1px 2px rgba(56,47,30,0.3); }
