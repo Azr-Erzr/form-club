@@ -141,6 +141,62 @@
     return 'https://www.youtube-nocookie.com/embed/' + vid + '?playsinline=1&rel=0';
   }
 
+  /* anatomical focus diagram: silhouette + muscle patches in the card colorway */
+  const BODY_SIL =
+    '<g class="sil">' +
+      '<circle cx="60" cy="21" r="12.5"/>' +
+      '<path d="M44 38 Q60 33 76 38 L80 52 Q83 68 78 86 L76 108 Q75 116 72 118 L48 118 Q45 116 44 108 L42 86 Q37 68 40 52 Z"/>' +
+      '<path d="M40 44 Q30 52 28 72 L26 100 Q26 107 29 113" stroke-width="11" fill="none" stroke-linecap="round"/>' +
+      '<path d="M80 44 Q90 52 92 72 L94 100 Q94 107 91 113" stroke-width="11" fill="none" stroke-linecap="round"/>' +
+      '<path d="M51 118 L48 152 Q47 168 49 186" stroke-width="14" fill="none" stroke-linecap="round"/>' +
+      '<path d="M69 118 L72 152 Q73 168 71 186" stroke-width="14" fill="none" stroke-linecap="round"/>' +
+    '</g>';
+  /* [cx, cy, rx, ry] ellipses on the front-view silhouette */
+  const MUSCLE_PATCHES = {
+    chest: [[51, 57, 8.5, 6.5], [69, 57, 8.5, 6.5]],
+    shoulders: [[40, 45, 6, 5], [80, 45, 6, 5]],
+    traps: [[60, 43, 15, 5.5]],
+    neck: [[60, 34, 7, 4]],
+    biceps: [[31, 67, 4.5, 9], [89, 67, 4.5, 9]],
+    triceps: [[30, 71, 4.5, 9], [90, 71, 4.5, 9]],
+    forearms: [[27.5, 99, 4.5, 12], [92.5, 99, 4.5, 12]],
+    core: [[60, 94, 9, 12]],
+    obliques: [[48, 92, 4, 10], [72, 92, 4, 10]],
+    back: [[60, 72, 14, 17]],
+    lats: [[45, 78, 5, 14], [75, 78, 5, 14]],
+    lowerback: [[60, 106, 10, 7]],
+    glutes: [[60, 116, 13, 8]],
+    quads: [[50, 143, 6.5, 16], [70, 143, 6.5, 16]],
+    hamstrings: [[50, 150, 6, 14], [70, 150, 6, 14]],
+    adductors: [[55, 138, 4, 12], [65, 138, 4, 12]],
+    abductors: [[45, 132, 4, 11], [75, 132, 4, 11]],
+    calves: [[48.5, 172, 5, 11], [71.5, 172, 5, 11]],
+  };
+  const MUSCLE_KEYS = [
+    ['quadricep', 'quads'], ['quad', 'quads'], ['glute', 'glutes'], ['hamstring', 'hamstrings'],
+    ['calf', 'calves'], ['calv', 'calves'], ['pector', 'chest'], ['chest', 'chest'],
+    ['delt', 'shoulders'], ['shoulder', 'shoulders'], ['trap', 'traps'], ['neck', 'neck'],
+    ['bicep', 'biceps'], ['tricep', 'triceps'], ['forearm', 'forearms'], ['grip', 'forearms'],
+    ['wrist', 'forearms'], ['abdominal', 'core'], ['abs', 'core'], ['core', 'core'],
+    ['oblique', 'obliques'], ['lower back', 'lowerback'], ['low back', 'lowerback'],
+    ['lat', 'lats'], ['middle back', 'back'], ['upper back', 'back'], ['rhomboid', 'back'],
+    ['back', 'back'], ['adductor', 'adductors'], ['abductor', 'abductors'],
+    ['hip', 'glutes'], ['leg', 'quads'], ['full body', 'core'],
+  ];
+  function figSvg(ex) {
+    const txt = String(ex.PrimaryMuscles || '').toLowerCase();
+    const found = new Set();
+    MUSCLE_KEYS.forEach(([kw, patch]) => { if (txt.includes(kw)) found.add(patch); });
+    let patches = '';
+    found.forEach((p) => {
+      (MUSCLE_PATCHES[p] || []).forEach(([cx, cy, rx, ry]) => {
+        patches += '<ellipse class="mus" cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '"/>';
+      });
+    });
+    return '<div class="fig"><svg class="body" viewBox="0 0 120 200" aria-hidden="true">' +
+      BODY_SIL + patches + '</svg><div class="tiles"></div></div>';
+  }
+
   const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
   function imagesOf(ex) {
     return String(ex.Images || '').split('|').filter(Boolean).map(p => IMG_BASE + p);
@@ -1092,7 +1148,9 @@
     let cards = '';
     if (workout) {
       const rows = rowsForWorkout(wid);
-      const renderExerciseCard = (row) => {
+      const renderExerciseCard = (row, idx) => {
+        const num = typeof idx === 'number' && idx >= 0 ? idx + 1 : 0;
+        const cw = num > 0 ? ['', ' cw-terra', ' cw-pool'][(num - 1) % 3] : '';
         const ex = exById(row.ExerciseID) || { ExerciseName: row.ExerciseID, BackFlag: 'Green' };
         const nSets = Number(row.TargetSets) || 1;
         const done = sess.sets[row.ExerciseID] || [];
@@ -1116,8 +1174,10 @@
         }
         const det = sess.details[row.ExerciseID] || {};
         return (
-        '<div class="card excard" id="ex-' + esc(row.ExerciseID) + '">' +
+        '<div class="card excard' + cw + '" id="ex-' + esc(row.ExerciseID) + '">' +
+          (num > 0 ? '<div class="ex-num">' + num + '</div>' : '') +
           '<div class="excard-head">' +
+            figSvg(ex) +
             '<span class="flag ' + flagClass(ex.BackFlag) + '"></span>' +
             '<div style="flex:1">' +
               '<div class="excard-name">' + esc(ex.ExerciseName) + '</div>' +
@@ -1158,7 +1218,7 @@
               '<button class="infobtn danger" data-action="remove-warmup" aria-label="Remove warm-up"><i data-lucide="x"></i></button>' +
             '</div>' +
           '</div>' +
-          (collapsed ? '<div class="resultcount">Collapsed - tap the chevron to show exercises.</div>' : '<div class="warmup-list">' + warmupRows.map(renderExerciseCard).join('') + '</div>') +
+          (collapsed ? '<div class="resultcount">Collapsed - tap the chevron to show exercises.</div>' : '<div class="warmup-list">' + warmupRows.map((r) => renderExerciseCard(r, -1)).join('') + '</div>') +
         '</div>'
       ) : '';
       cards = warmupHtml + mainRows.map(renderExerciseCard).join('');
@@ -1187,7 +1247,7 @@
         '<button class="toolbtn actiontool" data-action="open-voice-log"><i data-lucide="mic"></i>Quick log</button>' +
         '<button class="toolbtn actiontool" data-action="open-tools"><i data-lucide="calculator"></i>Tools</button>' +
       '</div>' +
-      (workout && workout.BackWarning ? '<div class="badge mt8" style="margin-bottom:14px"><i data-lucide="shield"></i>' + esc(workout.BackWarning) + '</div>' : '') +
+      (workout && workout.BackWarning ? '<div class="guardbar"><i data-lucide="shield-check"></i><span>' + esc(workout.BackWarning) + '</span></div>' : '') +
       cards +
       '<div class="card mt16 prep-card"><div class="minihead"><span>Pre-workout checklist</span>' +
         (prep.updatedAt ? '<button class="infobtn" data-action="open-time-info" aria-label="Time info"><i data-lucide="info"></i></button>' : '') + '</div>' +
@@ -1324,7 +1384,7 @@
       return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
     return '<svg class="sparkline" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
-      '<polyline points="' + pts + '" fill="none" stroke="#C6A15B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      '<polyline points="' + pts + '" fill="none" stroke="#35845A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
 
   const BACK_CIRCUIT_IDS = ['EX0012', 'EX0013', 'EX0022', 'EX0010', 'EX0021'];
