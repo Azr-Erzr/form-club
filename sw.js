@@ -1,7 +1,7 @@
 /* Form — offline shell */
-const VERSION = 'forme-v20';
+const VERSION = 'forme-v21';
 const SHELL = [
-  './', 'index.html', 'styles.css?v=20', 'app.js?v=20', 'config.js?v=20', 'manifest.webmanifest?v=20',
+  './', 'index.html', 'styles.css?v=21', 'app.js?v=21', 'config.js?v=21', 'manifest.webmanifest?v=21',
   'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'data/exercises.csv', 'data/workouts.csv', 'data/workout_days.csv',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

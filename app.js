@@ -803,6 +803,15 @@
   }
   function dayStatusKey(name) { return 'ef_day_status_' + userKey(name || currentUser()); }
   function dayStatuses(name) { return lsGet(dayStatusKey(name), {}); }
+  function trackingStartKey(name) { return 'ef_tracking_start_' + userKey(name || currentUser()); }
+  function trackingStartDate(name) {
+    let start = localStorage.getItem(trackingStartKey(name));
+    if (!start) {
+      start = todayStr();
+      localStorage.setItem(trackingStartKey(name), start);
+    }
+    return start;
+  }
   function setDayStatus(date, wid, status) {
     const all = dayStatuses();
     all[date] = { WorkoutID: wid || '', status, UpdatedAt: new Date().toISOString() };
@@ -826,6 +835,7 @@
     if (fromJournal) return fromJournal;
     if (hasActivityOn(date)) return 'done';
     if (cached && cached.status === 'missed') return 'missed';
+    if (date < trackingStartDate()) return 'untracked';
     if (date < todayStr() && wid) return 'missed';
     if (date === todayStr()) return 'today';
     return 'upcoming';
@@ -838,7 +848,7 @@
     const start = addDays(new Date(), -(days || 28) + 1);
     for (let i = 0; i < (days || 28); i++) {
       const date = todayStr(addDays(start, i));
-      if (date >= todayStr() || all[date]) continue;
+      if (date < trackingStartDate() || date >= todayStr() || all[date]) continue;
       const wid = scheduledWorkoutIdForDate(new Date(date + 'T12:00:00'), mine);
       if (wid && !journalStatusForDate(date, wid) && !hasActivityOn(date)) {
         all[date] = { WorkoutID: wid, status: 'missed', UpdatedAt: new Date().toISOString() };
@@ -848,7 +858,7 @@
     if (changed) lsSet(dayStatusKey(), all);
   }
   function statusLabel(status) {
-    return status === 'done' ? 'Hit' : status === 'missed' ? 'Missed' : status === 'skipped' ? 'Skipped' : status === 'today' ? 'Today' : 'Planned';
+    return status === 'done' ? 'Hit' : status === 'missed' ? 'Missed' : status === 'skipped' ? 'Skipped' : status === 'today' ? 'Today' : status === 'untracked' ? 'Past' : 'Planned';
   }
 
   function repsDefault(target) {
@@ -1575,7 +1585,7 @@
     return '<div class="routine-calendar card">' +
       '<div class="calendar-summary"><span><b>' + done + '</b> hit</span><span><b>' + missed + '</b> missed</span><span>Last ' + (days || 28) + ' days</span></div>' +
       '<div class="calgrid">' + cells.join('') + '</div>' +
-      '<div class="resultcount mt8">Tap a day to open that routine. Missed days are inferred when a scheduled day passes with no saved activity.</div>' +
+      '<div class="resultcount mt8">Tap a day to open that routine. Dates before tracking started stay neutral; missed days are counted from today onward.</div>' +
     '</div>';
   }
 
