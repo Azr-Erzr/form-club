@@ -1,5 +1,5 @@
 /* Form — offline shell */
-const VERSION = 'forme-v21';
+const VERSION = 'forme-v22';
 const SHELL = [
   './', 'index.html', 'styles.css?v=21', 'app.js?v=21', 'config.js?v=21', 'manifest.webmanifest?v=21',
   'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
